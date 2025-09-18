@@ -1,0 +1,190 @@
+---
+date: 2024-06-06
+title: Collecting Kubernetes Pod Logs
+id: collect_kubernetes_pod_logs
+hide_table_of_contents: true
+---
+
+SigNoz enables seamless collection of Kubernetes pod logs, allowing you to perform various actions on the data.
+
+## Setup
+
+<Tabs entityName="plans">
+<TabItem value="signoz-cloud" label="SigNoz Cloud" default>
+
+To collect logs from your Kubernetes cluster in SigNoz Cloud, deploy the `k8s-infra` chart by following this [guide](https://signoz.io/docs/tutorial/kubernetes-infra-metrics/). 
+
+<Admonition type="note">
+Log collection of pods from all namespaces is enabled by default except for **kube-system**, **hotrod** and **locust**.
+</Admonition>
+
+</TabItem>
+
+<TabItem value='self-host' label='Self-Host'>
+
+To enable pod log collection and parse attributes such as pod name, namespace, container name, and UID etc. you need to deploy the `k8s-infra` chart in both scenarios:
+
+- **If SigNoz and applications are in the same cluster:** Install the `k8s-infra` chart in the cluster where [SigNoz is deployed](https://signoz.io/docs/install/kubernetes/).
+- **If SigNoz is hosted in a separate cluster:** Install the `k8s-infra` chart in the application clusters to monitor them and in the cluster hosting SigNoz to monitor its infrastructure.
+
+Follow [this guide](https://signoz.io/docs/tutorial/kubernetes-infra-metrics/) for detailed installation instructions.
+
+<Admonition type="note">
+Log collection of pods from all namespaces is enabled by default except for **kube-system**, **hotrod** and **locust**.
+</Admonition>
+
+To extract specific attributes from certain types of logs, you can use the various operators provided by OpenTelemetry, available [here](https://signoz.io/docs/userguide/logs/#operators-for-parsing-and-manipulating-logs).
+
+</TabItem>
+</Tabs>
+
+## Customizing Kubernetes Pod Logs Collection
+
+### Disable Automatic Pod Logs Collection
+
+1. Modify/Create `override-values.yaml` file with the below configuration to customize and override default settings 
+of the [`values.yaml`](https://github.com/SigNoz/charts/blob/main/charts/k8s-infra/values.yaml) file:
+
+```yaml
+presets:
+  logsCollection:
+    enabled: false
+```
+
+The `presets` key in the k8s-infra chart includes `logsCollection`, which controls log collection, and setting `enabled: false` disables automatic pod log collection.
+
+2. Apply the configuration:
+
+Run the below command in the directory containing the `override-values.yaml` file.
+
+```bash
+helm -n platform upgrade --install <release-name> signoz/k8s-infra -f override-values.yaml
+```
+
+`<release-name>`: Replace this placeholder with your helm release name (e.g., `my-monitoring`).
+
+To extract specific attributes from certain types of logs, you can use the various operators provided by OpenTelemetry, available [here](https://signoz.io/docs/userguide/logs/#operators-for-parsing-and-manipulating-logs).
+
+### Exclude/Include/Filter Logs Collection
+
+<Tabs>
+<TabItem value="filter-logs" label="Exclude Logs">
+
+To exclude logs based on namespaces, pods, or containers, you need to modify/create `override-values.yaml` file with the below configuration to customize and 
+override default settings of the [`values.yaml`](https://github.com/SigNoz/charts/blob/main/charts/k8s-infra/values.yaml) file:
+
+<Admonition type="warning">
+Excluding a namespace will exclude logs of all the pods in that namespace, if you want to exclude logs of specific pod just add the pod name and keep the namespace empty.
+</Admonition>
+
+```yaml
+presets:
+  logsCollection:
+    # whether to enable log collection
+    enabled: true
+    blacklist:
+      # whether to enable blacklisting
+      enabled: true
+      # whether to exclude signoz logs
+      signozLogs: false
+      # which namespaces to exclude
+      namespaces:
+        - kube-system
+      # which pods to exclude
+      pods:
+        - hotrod
+        - locust
+      # which containers to exclude
+      containers: []
+      # additional exclude rules
+      additionalExclude: []
+```
+The `presets` key in the k8s-infra chart includes `logsCollection`, which controls log collection, and enabling `blacklist` allows exclusion of logs from 
+specified namespaces, pods, and containers.
+
+
+Run the below command in the directory containing the `override-values.yaml` file to apply the configuration:
+
+```bash
+helm -n platform upgrade --install <release-name> signoz/k8s-infra -f override-values.yaml
+```
+
+`<release-name>`: Replace this placeholder with your helm release name (e.g., `my-monitoring`).
+
+</TabItem>
+
+<TabItem value="include-logs" label="Include Logs">
+
+To include logs based on namespaces, pods, or containers, you need to modify/create `override-values.yaml` file with the below configuration to customize and 
+override default settings of the [`values.yaml`](https://github.com/SigNoz/charts/blob/main/charts/k8s-infra/values.yaml) file:
+
+<Admonition type="warning">
+Including a namespace will include logs of all the pod in that namespace, if you want to include logs of specific pod just add the pod name and keep the namespace empty.
+</Admonition>
+
+```yaml
+presets:
+  logsCollection:
+    # whether to enable log collection
+    enabled: true
+    whitelist:
+      # whether to enable whitelisting
+      enabled: true
+      # whether to include signoz logs
+      signozLogs: false
+      # which namespaces to include
+      namespaces:
+        - platform
+        - my-application-namespace
+      # which pods to include
+      pods:
+        - otel  # all pods with otel prefix
+        - my-application-pod
+      # which containers to include
+      containers: []
+      # additional include rules
+      additionalInclude: []
+```
+The `presets` key in the k8s-infra chart includes `logsCollection`, which controls log collection, and enabling `whitelist` allows inclusion of logs from 
+specified namespaces, pods, and containers.
+
+Run the below command in the directory containing the `override-values.yaml` file to apply the configuration:
+
+```bash
+helm -n platform upgrade --install <release-name> signoz/k8s-infra -f override-values.yaml
+```
+
+`<release-name>`: Replace this placeholder with your helm release name (e.g., `my-monitoring`).
+
+</TabItem>
+
+<TabItem value="filter-operator" label="Filter Operator">
+
+To filter logs using [expression](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/pkg/stanza/docs/types/expression.md), you need to 
+modify/create `override-values.yaml` file with the below configuration to customize and override default settings of the [`values.yaml`](https://github.com/SigNoz/charts/blob/main/charts/k8s-infra/values.yaml) file:
+
+
+```yaml
+presets:
+  logsCollection:
+    enabled: true
+    operators:
+      - type: filter
+        expr: 'body matches "^LOG: .* END$"'
+        drop_ratio: 1.0
+```
+
+This filters logs matching the expression and drops them entirely. Learn more about the filter operator [here](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/pkg/stanza/docs/operators/filter.md).
+
+Run the below command in the directory containing the `override-values.yaml` file to apply the configuration:
+
+```bash
+helm -n platform upgrade --install <release-name> signoz/k8s-infra -f override-values.yaml
+```
+
+`<release-name>`: Replace this placeholder with your helm release name (e.g., `my-monitoring`).
+
+</TabItem>
+</Tabs>
+
+After making changes to the configuration, restart the OpenTelemetry Collector pod deployed by the `k8s-infra` chart to apply the updates.

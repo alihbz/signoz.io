@@ -1,0 +1,578 @@
+---
+date: 2024-07-20
+id: fns-metrics
+title: Cloud Function Metrics
+hide_table_of_contents: true
+---
+## Overview
+
+This document provides a detailed walkthrough on how to send Google Cloud Functions metrics to SigNoz. 
+
+<Tabs entityName="plans">
+<TabItem value="signoz-cloud" label="SigNoz Cloud" default>
+
+{/* **Here's a quick summary of what we will be doing in this guide**
+
+* Create and configure a Cloud Function to generate the metrics.
+* Invoke the Cloud Function.
+* Deploy OpenTelemetry Collector to scrape the metrics from Google Cloud Monitoring. 
+* Send and Visualize the metrics obtained by OpenTelemetry in SigNoz. */}
+
+## Prerequisites
+
+* A [Google Cloud account](https://console.cloud.google.com/) with administrative privileges or Cloud Functions Admin privileges.
+* Access to a project in Google Cloud Platform (GCP).
+* The Google Cloud Functions APIs must be enabled. You can follow [this](https://support.google.com/googleapi/answer/6158841?hl=en) guide to learn how to enable an API in Google Cloud.
+
+## Setup
+
+### Get started with Cloud Function Configuration
+
+Follow these steps to create the Cloud Function:
+
+Step 1: Go to your GCP console and search for Cloud Functions, go to Functions, and click on **CREATE FUNCTION**.
+
+<figure data-zoomable align="left">
+    <img
+        src="/img/docs/gcp-monitoring/fns-metrics/create-cloud-function.webp"
+        alt="Create Cloud Function"
+    />
+<figcaption>
+<i>
+Create Cloud Functions
+</i>
+</figcaption>
+</figure>
+
+Step 2: Enter the following information to create a Cloud Function:
+
+1. Environment: Select "2nd gen."
+2. Function name: Enter a name for your Cloud Function.
+3. Region: The default region of your GCP account will be used.
+4. Trigger: Specify how the Cloud Function will be triggered.
+5. Trigger Type: Select "HTTPS" to enable triggering the Cloud Function via a URL.
+6. Authentication: Decide if the invocation needs to be authenticated or unauthenticated. For this demonstration, we have chosen unauthenticated invocation.
+
+<figure data-zoomable align="left">
+    <img
+        src="/img/docs/gcp-monitoring/fns-metrics/configure-cloud-function.webp"
+        alt="Configure Cloud Function"
+    />
+<figcaption>
+<i>
+Configure Cloud Function
+</i>
+</figcaption>
+</figure>
+
+Step 3: Click on the **NEXT** button, which will bring us to the page where we can add our code. Here we are using a simple python Hello World! script.
+
+<figure data-zoomable align="left">
+    <img
+        src="/img/docs/gcp-monitoring/fns-metrics/code-cloud-function.webp"
+        alt="Set Entrypoint and source code"
+    />
+<figcaption>
+<i>
+Set entrypoint and source code
+</i>
+</figcaption>
+</figure>
+
+### Add code to the Google Cloud Function
+
+For this demonstration, we will be using python 3.11.
+
+Here is the complete code for the `main.py` file, along with a summary of its functionality.
+
+```python
+import functions_framework
+
+@functions_framework.http
+def hello_http(request):
+    """HTTP Cloud Function.
+    Args:
+        request (flask.Request): The request object.
+        <https://flask.palletsprojects.com/en/1.1.x/api/#incoming-request-data>
+    Returns:
+        The response text, or any set of values that can be turned into a
+        Response object using `make_response`
+        <https://flask.palletsprojects.com/en/1.1.x/api/#flask.make_response>.
+    """
+    request_json = request.get_json(silent=True)
+    request_args = request.args
+
+    if request_json and 'name' in request_json:
+        name = request_json['name']
+    elif request_args and 'name' in request_args:
+        name = request_args['name']
+    else:
+        name = 'World'
+    return 'Hello {}!'.format(name)
+
+```
+
+1. **Import the Framework**: The `functions_framework` module is imported to handle HTTP requests.
+
+2. **Define the Function**: The `hello_http` function is defined to process HTTP requests. This function is triggered whenever the Cloud Function receives an HTTP request.
+
+3. **Handle the Request**:
+
+    * The function checks if the incoming request contains JSON data (`request_json`).
+    * It also checks for URL query parameters (`request_args`).
+
+4. **Determine the Name to Greet**:
+
+    * If the JSON body contains a key `name`, it uses its value.
+    * If the query parameters contain a key `name`, it uses its value.
+    * If neither is provided, it defaults to 'World'.
+
+5. **Return the Response**:
+
+    * The function returns a greeting message: 'Hello &#123;name&#125;!', where '&#123;name&#125;'' is replaced with the determined name.
+
+## Testing your cloud function
+
+**Step 1:** After completing the deployment, navigate to the **TRIGGER** section to obtain the URL to invoke the function.
+
+<figure data-zoomable align="left">
+    <img
+        src="/img/docs/gcp-monitoring/fns-metrics/cloud-function-link.webp"
+        alt="Deploying Function"
+    />
+<figcaption>
+<i>
+Deploying Cloud Function
+</i>
+</figcaption>
+</figure>
+
+**Step 2:** Hit the URL that you have obtained, and you should see the function output.
+
+<figure data-zoomable align="left">
+    <img
+        src="/img/docs/gcp-monitoring/fns-metrics/trigger-cloud-function.webp"
+        alt="Cloud Function URL"
+    />
+<figcaption>
+<i>
+Trigger Cloud function.
+</i>
+</figcaption>
+</figure>
+
+## Deploy OpenTelemetry to scrape the metrics from Google Cloud Monitoring
+
+**Step 1:** Install and configure OpenTelemetry for scraping the metrics from Google Cloud Monitoring. Follow [OpenTelemetry Binary Usage in Virtual Machine](https://signoz.io/docs/tutorial/opentelemetry-binary-usage-in-virtual-machine/) guide for detailed instructions.
+
+<Admonition type="note">
+Note that `googlecloudmonitoring` receiver is supported only from version 0.112.0 and above of opentelemetry-collector. So, ensure you download and use the appropriate release.
+</Admonition>
+
+**Step 2:** Create `config.yaml`. 
+
+Under the `googlecloudmonitoring` receiver, you need to specify the metrics that you want to capture in the `metrics_list`. You can include all the metrics that you would like to capture for Cloud Function, see the [available metrics for Cloud Function](https://cloud.google.com/monitoring/api/metrics_gcp#gcp-cloudfunctions).
+
+Here is the `config.yaml` file for capturing Cloud Function metrics:
+
+```
+receivers:
+  googlecloudmonitoring:
+    collection_interval: 5m # Can be specified in seconds (s), minutes (m), or hours (h)
+    project_id: my-project-id
+    metrics_list:
+      - metric_name: "cloudfunctions.googleapis.com/function/execution_count"
+      - metric_name: "cloudfunctions.googleapis.com/function/execution_times"
+      - metric_name: "cloudfunctions.googleapis.com/function/instance_count"
+      - metric_name: "cloudfunctions.googleapis.com/function/network_egress"
+      - metric_name: "cloudfunctions.googleapis.com/function/user_memory_bytes"
+      - metric_name: "cloudfunctions.googleapis.com/function/active_instances"
+processors:
+  resource/env:
+    attributes:
+    - key: deployment.environment
+      value: prod
+      action: upsert
+  batch: {}
+exporters:
+  otlp:
+    endpoint: "ingest.{region}.signoz.cloud:443"
+    tls:
+      insecure: false
+    headers:
+      "signoz-ingestion-key": "<SIGNOZ_INGESTION_KEY>"
+service:
+  pipelines:
+    metrics:
+      receivers: [googlecloudmonitoring]
+      processors: [resource/env,batch]
+      exporters: [otlp]
+```
+
+Depending on the choice of your region for SigNoz cloud, the otlp endpoint will vary according to this table.
+
+| Region	| Endpoint |
+| --- | --- |
+| US | ingest.us.signoz.cloud:443 |
+| IN | ingest.in.signoz.cloud:443 |
+| EU | ingest.eu.signoz.cloud:443 |
+
+After successful configuration start the OTel Collector using following command:
+
+```sh
+./otelcol-contrib --config ./config.yaml &> otelcol-output.log & echo "$!" > otel-pid
+```
+
+**Step 3:** If the configurations are configured correctly, you can see the output logs from OpenTelemtry as follows:
+
+<figure data-zoomable align="left">
+    <img
+        src="/img/docs/gcp-monitoring/fns-metrics/otel-logs.webp"
+        alt="OTel Collector Logs"
+    />
+<figcaption>
+<i>
+Viewing OTel Collector Logs
+</i>
+</figcaption>
+</figure>
+
+## Send and Visualize the metrics obtained by OpenTelemetry in SigNoz
+
+**Step 1:** Go to the SigNoz Cloud URL and head over to the dashboard.
+
+**Step 2:** If not already created, create a new dashboard. You can create the dashboard and multiple panel under it by following the instructions [here](https://signoz.io/docs/userguide/manage-dashboards/).
+
+**Step 3:** While creating the panel, select metric for Cloud Function.
+
+All metrics starting with `cloudfunctions_googleapis_com_` have been collected from Cloud Function.
+
+For example, `cloudfunctions_googleapis_com_function_execution_times` is one of the metrics which is collected.
+
+Here is the sample dashboard for Cloud Function:
+
+<figure data-zoomable align="left">
+    <img
+        src="/img/docs/gcp-monitoring/fns-metrics/dashboard-cloud-function.webp"
+        alt="GCP Cloud Function dashboard"
+    />
+<figcaption>
+<i>
+GCP Cloud Function dashboard
+</i>
+</figcaption>
+</figure>
+
+## Troubleshooting
+
+If you run into any problems while setting up monitoring for your Cloud Function's metrics with SigNoz, consider these troubleshooting steps:
+
+
+* **Verify Configuration**: Double-check your `config.yaml` file to ensure all settings, including the ingestion key and endpoint, are correct.
+* **Review Logs**: Look at the logs of both your Cloud Function and the OpenTelemetry Collector to identify any error messages or warnings that might provide insights into what’s going wrong.
+* **Update Dependencies**: Ensure all relevant packages and dependencies are up-to-date to avoid compatibility issues.
+* **Consult Documentation**: Review the SigNoz and OpenTelemetry documentation for any additional troubleshooting of the common issues.s
+
+</TabItem>
+
+<TabItem value='self-host' label='Self-Host'>
+
+{/* **Here’s a quick summary of what we will be doing in this guide**
+
+* Create and configure a Cloud Function to generate the metrics.
+* Deploy OpenTelemetry Collector to fetch the metrics from Google Cloud Monitoring.
+* Deploy the self-hosted **SigNoz.**
+* Invoke the Cloud Function.
+* Visualize the metrics in the **SigNoz** dashboard. */}
+
+## Prerequisites
+
+* A [Google Cloud account](https://console.cloud.google.com/) with administrative privileges or Cloud Functions Admin privileges.
+* Access to a project in Google Cloud Platform (GCP).
+* The Google Cloud Functions APIs must be enabled. You can follow [this](https://support.google.com/googleapi/answer/6158841?hl=en) guide to learn how to enable an API in Google Cloud.
+
+## Setup
+
+### Get started with Cloud Function Configuration
+
+Follow these steps to create the Cloud Function:
+
+**Step 1**: Go to your GCP console and search for Cloud Functions, go to Functions, and click on **CREATE FUNCTION**.
+
+<figure data-zoomable align="left">
+    <img
+        src="/img/docs/gcp-monitoring/fns-metrics/create-cloud-function.webp"
+        alt="Create Cloud Function"
+    />
+<figcaption>
+<i>
+Create Cloud Functions
+</i>
+</figcaption>
+</figure>
+
+**Step 2:** Enter the following information to create a Cloud Function:
+
+1. Environment: Select "2nd gen."
+2. Function name: Enter a name for your Cloud Function.
+3. Region: The default region of your GCP account will be used.
+4. Trigger: Specify how the Cloud Function will be triggered.
+5. Trigger Type: Select "HTTPS" to enable triggering the Cloud Function via a URL.
+6. Authentication: Decide if the invocation needs to be authenticated or unauthenticated. For this demonstration, we have chosen unauthenticated invocation.
+
+<figure data-zoomable align="left">
+    <img
+        src="/img/docs/gcp-monitoring/fns-metrics/configure-cloud-function.webp"
+        alt="Configure Cloud Function"
+    />
+<figcaption>
+<i>
+Configure Cloud Function
+</i>
+</figcaption>
+</figure>
+
+**Step 3:** Click on the **NEXT** button, which will bring us to the page where we can add our code. Here we are using a simple python Hello World! script.
+
+<figure data-zoomable align="left">
+    <img
+        src="/img/docs/gcp-monitoring/fns-metrics/code-cloud-function.webp"
+        alt="Set Entrypoint and source code"
+    />
+<figcaption>
+<i>
+Set entrypoint and source code
+</i>
+</figcaption>
+</figure>
+
+### Add code to the Google Cloud Function
+
+For this demonstration, we will be using python 3.11.
+
+Here is the complete code for the `main.py` file, along with a summary of its functionality.
+
+```python
+import functions_framework
+
+@functions_framework.http
+def hello_http(request):
+    """HTTP Cloud Function.
+    Args:
+        request (flask.Request): The request object.
+        <https://flask.palletsprojects.com/en/1.1.x/api/#incoming-request-data>
+    Returns:
+        The response text, or any set of values that can be turned into a
+        Response object using `make_response`
+        <https://flask.palletsprojects.com/en/1.1.x/api/#flask.make_response>.
+    """
+    request_json = request.get_json(silent=True)
+    request_args = request.args
+
+    if request_json and 'name' in request_json:
+        name = request_json['name']
+    elif request_args and 'name' in request_args:
+        name = request_args['name']
+    else:
+        name = 'World'
+    return 'Hello {}!'.format(name)
+```
+
+
+1. **Import the Framework**: The `functions_framework` module is imported to handle HTTP requests.
+
+2. **Define the Function**: The `hello_http` function is defined to process HTTP requests. This function is triggered whenever the Cloud Function receives an HTTP request.
+
+3. **Handle the Request**:
+
+    * The function checks if the incoming request contains JSON data (`request_json`).
+    * It also checks for URL query parameters (`request_args`).
+
+4. **Determine the Name to Greet**:
+
+    * If the JSON body contains a key `name`, it uses its value.
+    * If the query parameters contain a key `name`, it uses its value.
+    * If neither is provided, it defaults to 'World'.
+
+5. **Return the Response**:
+
+    * The function returns a greeting message: 'Hello &#123;name&#125;!', where '&#123;name&#125;' is replaced with the determined name.
+
+
+## Testing your Cloud Function
+
+**Step 1:** After completing the deployment, navigate to the **TRIGGER** section to obtain the URL to invoke the function.
+
+<figure data-zoomable align="left">
+    <img
+        src="/img/docs/gcp-monitoring/fns-metrics/cloud-function-link.webp"
+        alt="Deploying Function"
+    />
+<figcaption>
+<i>
+Deploying Cloud Function
+</i>
+</figcaption>
+</figure>
+
+**Step 2:** Hit the URL that you have obtained, and you should see the function output.
+
+<figure data-zoomable align="left">
+    <img
+        src="/img/docs/gcp-monitoring/fns-metrics/trigger-cloud-function.webp"
+        alt="Cloud Function URL"
+    />
+<figcaption>
+<i>
+Trigger Cloud function.
+</i>
+</figcaption>
+</figure>
+
+## Deploying a Self-Hosted SigNoz in a Docker container
+
+**Step 1:** The deployment process of the Self-Hosted `SigNoz` can be found in official [documentation](https://signoz.io/docs/install/docker/).
+
+**Step 2:** Make sure all the containers are running in a **Healthy** state.
+
+<figure data-zoomable align="left">
+    <img
+        src="/img/docs/gcp-monitoring/fns-metrics/signoz-self-host-docker-ps.webp"
+        alt="SigNoz Self-Hosted using Docker."
+    />
+<figcaption>
+<i>
+SigNoz Self-Hosted using Docker.
+</i>
+</figcaption>
+</figure>
+
+<Admonition type="note">
+Note that `googlecloudmonitoring` receiver is supported only from version 0.112.0 and above of opentelemetry-collector. So, ensure you download and use the appropriate release.
+</Admonition>
+
+<Tabs>
+<TabItem value="self-hosted-otel" label="Directly send to self-hosted SigNoz">
+
+The self-hosted SigNoz setup also includes the OTel collector in the bundle. Docker will deploy the OTel collector beside SigNoz as a container. The same OTel collector can be used to directly receive any signals, otherwise, if one more OTel Collector is required for a more granular collection, we can add an additional independent OTel collector, see Using Central OTel collector in between tab.
+
+</TabItem>
+
+<TabItem value="addon-otel" label="Using central OTel collector in between">
+
+Apart from using the native OTel collector present in the docker from the previous method, we can also deploy an additional independent OTel collector which can act as an additional collector in this setup for more granular metrics collection.
+
+**Step 1:** Install and configure OpenTelemetry to scrape the metrics from Google Cloud Monitoring. Add the following code block to the OpenTelemetry configuration file. Under exporters, we should have an exporter pointing to our SigNoz self-host setup. For example, in the below snippet, the endpoint-ip would be the address of the VM in which the SigNoz self-host setup is present.
+
+```yaml
+exporters:
+  otlp:
+	endpoint: "<endpoint-ip>:4317"
+	tls:
+  	   insecure: true
+  debug:
+	verbosity: normal
+```
+
+**Step 2:** After successful configuration, start the OTel service.
+
+<Admonition type="note">
+Please make appropriate changes to the networking connections (adding network to security groups, opening ports, etc.) on your VMs as per your setup.
+</Admonition>
+
+</TabItem>
+
+</Tabs>
+
+## Configuring config.yaml
+
+Here is the `config.yaml` file for capturing Cloud Function metrics:
+
+```
+receivers:
+  googlecloudmonitoring:
+    collection_interval: 5m # Can be specified in seconds (s), minutes (m), or hours (h)
+    project_id: my-project-id
+    metrics_list:
+      - metric_name: "cloudfunctions.googleapis.com/function/execution_count"
+      - metric_name: "cloudfunctions.googleapis.com/function/execution_times"
+      - metric_name: "cloudfunctions.googleapis.com/function/instance_count"
+      - metric_name: "cloudfunctions.googleapis.com/function/network_egress"
+      - metric_name: "cloudfunctions.googleapis.com/function/user_memory_bytes"
+      - metric_name: "cloudfunctions.googleapis.com/function/active_instances"
+processors:
+  resource/env:
+    attributes:
+    - key: deployment.environment
+      value: prod
+      action: upsert
+  batch: {}
+exporters:
+  otlp:
+	endpoint: "<endpoint-ip>:4317"
+	tls:
+  	   insecure: true
+  debug:
+	verbosity: normal
+service:
+  pipelines:
+    metrics:
+      receivers: [googlecloudmonitoring]
+      processors: [resource/env,batch]
+      exporters: [otlp]
+```
+
+You can include all the metrics that you would like to capture for Cloud Function, see the [available metrics for Cloud Function](https://cloud.google.com/monitoring/api/metrics_gcp#gcp-cloudfunctions).
+
+If the configurations are configured correctly, you can see the output logs from OpenTelemtry as follows:
+
+<figure data-zoomable align="left">
+    <img
+        src="/img/docs/gcp-monitoring/fns-metrics/otel-logs.webp"
+        alt="OTel Collector Logs"
+    />
+<figcaption>
+<i>
+Viewing OTel Collector Logs
+</i>
+</figcaption>
+</figure>
+
+## Visualize the metrics in Self-Hosted SigNoz
+
+**Step 1:** Go to your Self-Hosted SigNoz UI, and navigate to the Self-Hosted SigNoz dashboard. Click on the **Dashboards** section to view the metrics. Create a new dashboard (If not already present ). The default Self-Hosted SigNoz dashboard endpoint would be `http://<Self-Hosted SigNoz-host-ip>:3301`, however, the URL can be different based on how you have set up the infrastructure.
+
+**Step 2:** If not already created, create a new dashboard. You can create the dashboard and multiple panel under it by following the instructions [here](https://signoz.io/docs/userguide/manage-dashboards/).
+
+**Step 3:** While creating the panel, select metric for Cloud Function.
+
+All metrics starting with `cloudfunctions_googleapis_com_` have been collected from Cloud Function.
+
+For example, `cloudfunctions_googleapis_com_function_execution_times` is one of the metrics which is collected.
+
+Here is the sample dashboard for Cloud Function:
+
+<figure data-zoomable align="left">
+    <img
+        src="/img/docs/gcp-monitoring/fns-metrics/dashboard-cloud-function.webp"
+        alt="GCP Cloud Function dashboard"
+    />
+<figcaption>
+<i>
+GCP Cloud Function dashboard
+</i>
+</figcaption>
+</figure>
+
+## Troubleshooting
+
+If you run into any problems while setting up monitoring for your Cloud Function's metrics with SigNoz, consider these troubleshooting steps:
+
+* **Verify Configuration**: Double-check your `config.yaml` file to ensure all settings, including the ingestion key and endpoint, are correct.
+* **Verify Docker container logs:** Check if all the containers are running properly, and not unexpectedly crashed.
+* **Review Logs**: Look at the logs of both your Cloud Function and the OpenTelemetry Collector to identify any error messages or warnings that might provide insights into what’s going wrong.
+* **Update Dependencies**: Ensure all relevant packages and dependencies are up-to-date to avoid compatibility issues.
+* **Consult Documentation**: Review the SigNoz and OpenTelemetry documentation for any additional troubleshooting of the common issues.
+
+</TabItem>
+</Tabs>

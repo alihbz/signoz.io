@@ -1,0 +1,212 @@
+---
+date: 2024-12-17
+title: Collecting Syslogs
+id: collecting_syslogs
+hide_table_of_contents: true
+---
+
+## Overview
+
+With SigNoz, you can easily collect and analyze system logs. This document shows how to set up `rsyslog` to forward logs to the OpenTelemetry (OTel) Collector using 
+the syslog receiver, so you can parse, query, and monitor logs with minimal effort.
+
+## Prerequisite
+- Unix based Operating System
+
+<Tabs entityName="plans">
+
+<TabItem value="signoz-cloud" label="SigNoz Cloud" default>
+
+## Collect Syslogs in SigNoz Cloud
+
+### Step 1: Add OTel Collector Binary
+
+Add the OpenTelemetry Collector binary to your VM by following this [guide](https://signoz.io/docs/tutorial/opentelemetry-binary-usage-in-virtual-machine/).
+
+### Step 2: Configure Syslog Receiver in OTel Collector
+
+Add the `syslog` receiver to the `config.yaml` of the OTel Collector:
+
+```yaml
+receivers:
+  syslog:
+    tcp:
+      listen_address: "0.0.0.0:54527"
+    protocol: rfc3164
+    location: UTC
+    operators:
+      - type: move
+        from: attributes.message
+        to: body
+...
+```
+
+Here, we collect logs and move messages from `attributes` to `body` using operators. Read more about operators [here](https://signoz.io/docs/userguide/logs#operators-for-parsing-and-manipulating-logs).
+
+For additional configurations for the syslog receiver, check [here](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver/syslogreceiver).
+
+### Step 3: Update Pipeline in OTel Collector
+
+Modify the pipeline inside `config.yaml` to include the syslog receiver:
+
+```yaml
+service:
+    ...
+    logs:
+        receivers: [otlp, syslog]
+        processors: [batch]
+        exporters: [otlp]
+```
+
+### Step 4: Restart OTel Collector
+
+Restart the OTel Collector to apply the new changes.
+
+### Step 5: Modify `rsyslog.conf`
+
+Run the following command to edit the `rsyslog.conf` file:
+
+```bash
+sudo vim /etc/rsyslog.conf
+```
+
+Add the following lines at the end:
+
+```rsyslog
+template(
+  name="UTCTraditionalForwardFormat"
+  type="string"
+  string="<%PRI%>%TIMESTAMP:::date-utc% %HOSTNAME% %syslogtag:1:32%%msg:::sp-if-no-1st-sp%%msg%"
+)
+
+*.* action(type="omfwd" target="0.0.0.0" port="54527" protocol="tcp" template="UTCTraditionalForwardFormat")
+```
+
+For production use cases, configure retries and queues:
+
+```rsyslog
+*.*  action(type="omfwd" target="0.0.0.0" port="54527" protocol="tcp"
+        action.resumeRetryCount="10"
+        queue.type="linkedList" queue.size="10000" template="UTCTraditionalForwardFormat")
+```
+
+### Step 6: Restart rsyslog Service
+
+Restart the `rsyslog` service:
+
+```bash
+sudo systemctl restart rsyslog.service
+```
+
+Check the status:
+
+```bash
+sudo systemctl status rsyslog.service
+```
+
+If there are no errors, logs will be visible in the SigNoz UI.
+
+</TabItem>
+
+<TabItem value='self-host' label='Self-Host'>
+
+## Collect Syslogs in Self-Hosted SigNoz
+
+### Step 1: Update `docker-compose.yaml`
+
+Modify the `docker-compose.yaml` file in `deploy/docker` to expose port `54527`:
+
+```yaml
+...
+otel-collector:
+    image: signoz/signoz-otel-collector:0.88.11
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "54527:54527"
+...
+```
+
+### Step 2: Configure Syslog Receiver in OTel Collector
+
+Add the `syslog` receiver to `otel-collector-config.yaml`:
+
+```yaml
+receivers:
+  syslog:
+    tcp:
+      listen_address: "0.0.0.0:54527"
+    protocol: rfc3164
+    location: UTC
+    operators:
+      - type: move
+        from: attributes.message
+        to: body
+...
+```
+
+### Step 3: Update Pipeline in OTel Collector
+
+Modify the pipeline to include the syslog receiver:
+
+```yaml
+service:
+    ...
+    logs:
+        receivers: [otlp, syslog]
+        processors: [batch]
+        exporters: [clickhouselogsexporter]
+```
+
+### Step 4: Restart OTel Collector Container
+
+Restart the OTel Collector container to apply the changes.
+
+### Step 5: Modify `rsyslog.conf`
+
+Edit the `rsyslog.conf` file:
+
+```bash
+sudo vim /etc/rsyslog.conf
+```
+
+Add the following lines:
+
+```rsyslog
+template(
+  name="UTCTraditionalForwardFormat"
+  type="string"
+  string="<%PRI%>%TIMESTAMP:::date-utc% %HOSTNAME% %syslogtag:1:32%%msg:::sp-if-no-1st-sp%%msg%"
+)
+
+*.* action(type="omfwd" target="0.0.0.0" port="54527" protocol="tcp" template="UTCTraditionalForwardFormat")
+```
+
+For production use, add retries and queues:
+
+```rsyslog
+*.*  action(type="omfwd" target="0.0.0.0" port="54527" protocol="tcp"
+        action.resumeRetryCount="10"
+        queue.type="linkedList" queue.size="10000" template="UTCTraditionalForwardFormat")
+```
+
+### Step 6: Restart rsyslog Service
+
+Restart the `rsyslog` service:
+
+```bash
+sudo systemctl restart rsyslog.service
+```
+
+Check the status:
+
+```bash
+sudo systemctl status rsyslog.service
+```
+
+If there are no errors, logs will be visible in the SigNoz UI.
+
+</TabItem>
+
+</Tabs>

@@ -1,0 +1,155 @@
+---
+date: 2024-06-06
+title: Search Traces
+id: search-traces
+---
+This section provides detailed examples of searching traces using the SigNoz Trace API. The example queries demonstrate querying traces with specific attributes and filters.
+
+## Searching All Spans
+
+This query is useful when identifying all spans with specific characteristics, such as method type or error status.
+
+### Query Description
+
+This query searches for all spans where:
+
+- `deployment_name`= hotrod
+- `httpMethod`= GET
+- `hasError` = true
+
+### Attributes and Columns
+
+- Resource Attribute: `deployment_name`
+- Tag Attributes + Columns: `httpMethod`, `hasError`
+- Selected Columns: `serviceName`, `httpMethod`, `responseStatusCode`, `httpUrl`
+
+You can specify the start and end timestamps in Unix format (milliseconds).
+
+### Sample Payload 
+
+This is the JSON payload for the example query.
+
+```json
+{
+    "start": 1702009280000,
+    "end": 1702011080000,
+    "requestType": "raw",
+    "variables": {},
+    "compositeQuery": {
+        "queries": [
+            {
+                "type": "builder_query",
+                "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "filter": {
+                        "expression": "deployment_name = 'hotrod' AND httpMethod = 'GET' AND hasError = true"
+                    },
+                    "selectFields": [
+                        {
+                            "name": "serviceName",
+                        },
+                        {
+                            "name": "httpMethod",
+                        },
+                        {
+                            "name": "responseStatusCode",
+                        },
+                        {
+                            "name": "httpUrl",
+                        }
+                    ],
+                    "order": [
+                        {
+                            "key": {
+                                "name": "timestamp"
+                            },
+                            "direction": "desc"
+                        }
+                    ],
+                    "limit": 10,
+                    "offset": 0,
+                    "disabled": false
+                }
+            }
+        ]
+    }
+}
+```
+
+## Searching Root Spans
+
+This type of query can be useful to find the initial operation or root spans in a set of traces, which can be crucial for tracing the origin of an issue.
+
+### Query Description
+
+This query searches for  root spans with:
+
+- `deployment_name`= hotrod
+- `httpMethod`= GET
+
+### Attributes and Columns
+
+- Resource Attribute: `deployment_name`
+- Tag Attributes + Columns: `httpMethod`
+- Selected Columns: `serviceName`, `httpMethod`, `responseStatusCode`, `some_custom_tag`
+
+You can specify the start and end timestamps in Unix format (milliseconds).
+
+<Admonition>
+
+To search for root spans, you need to add `parentSpanID = ''` in the filter expression
+
+</Admonition>
+
+### Sample Payload 
+
+This is the JSON payload for the example query.
+
+```json
+{
+    "start": 1702009280000,
+    "end": 1702011080000,
+    "requestType": "raw",
+    "variables": {},
+    "compositeQuery": {
+        "queries": [
+            {
+                "type": "builder_query",
+                "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "filter": {
+                        "expression": "deployment_name = 'hotrod' AND httpMethod = 'GET' AND parentSpanID = ''"
+                    },
+                    "selectFields": [
+                        {
+                            "name": "serviceName",
+                        },
+                        {
+                            "name": "httpMethod",
+                        },
+                        {
+                            "name": "responseStatusCode",
+                        },
+                        {
+                            "name": "some_custom_tag",
+                        }
+                    ],
+                    "order": [
+                        {
+                            "key": {
+                                "name": "timestamp"
+                            },
+                            "direction": "desc"
+                        }
+                    ],
+                    "limit": 10,
+                    "offset": 0,
+                    "disabled": false
+                }
+            }
+        ]
+    }
+}
+```

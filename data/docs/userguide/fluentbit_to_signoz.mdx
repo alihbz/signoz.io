@@ -1,0 +1,146 @@
+---
+date: 2024-12-18
+title: FluentBit to SigNoz
+id: fluentbit_to_signoz
+hide_table_of_contents: true
+---
+
+If you use FluentBit to collect logs in your stack, this tutorial will guide you on how to send logs from FluentBit to SigNoz.
+
+At SigNoz, we use the OpenTelemetry Collector to receive logs, which supports the FluentForward protocol. You can forward logs from your FluentBit agent to the OpenTelemetry Collector using this protocol.
+
+<Tabs entityName="plans">
+<TabItem value="signoz-cloud" label="SigNoz Cloud" default>
+
+### Collect Logs Using FluentBit in SigNoz Cloud
+
+1. **Add OpenTelemetry Collector binary to your VM**
+Follow this [guide](https://signoz.io/docs/tutorial/opentelemetry-binary-usage-in-virtual-machine/).
+
+2. **Add FluentForward receiver to your `config.yaml`:**
+
+    ```yaml
+    receivers:
+      fluentforward:
+        endpoint: 0.0.0.0:24224
+    ```
+    Here, port 24224 is used for listening to the FluentForward protocol. You can change it to a port of your choice. Learn more about the FluentForward receiver [here](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver/fluentforwardreceiver).
+
+3. **Modify your `config.yaml` to include the receiver:**
+
+    ```yaml
+    service:
+      ...
+      logs:
+        receivers: [otlp, fluentforward]
+        processors: [batch]
+        exporters: [otlp]
+    ```
+
+4. **Update FluentBit configuration to forward logs to the OpenTelemetry Collector:**
+
+    ```
+    [OUTPUT]
+      Name          forward
+      Match         *
+      Host          localhost
+      Port          24224
+    ```
+    - This configuration forwards logs to the OpenTelemetry Collector listening on port 24224.
+    - If FluentBit is not running on the same host, replace `localhost` with the appropriate host value.
+
+5. **Restart FluentBit and OpenTelemetry Collector.**
+
+6. **Use processors to transform logs:**
+
+    To properly transform your existing log model into the OpenTelemetry [log model](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/logs/data-model.md), use OpenTelemetry processors:
+
+    ```yaml
+    processors:
+      logstransform:
+        operators:
+          - type: trace_parser
+            trace_id:
+              parse_from: attributes.trace_id
+            span_id:
+              parse_from: attributes.span_id
+          - type: remove
+            field: attributes.trace_id
+          - type: remove
+            field: attributes.span_id
+    ```
+
+</TabItem>
+
+<TabItem value='self-host' label='Self-Host'>
+
+### Collect Logs Using FluentBit in Self-Hosted SigNoz
+
+1. **Add FluentForward receiver to `otel-collector-config.yaml`:**
+
+    ```yaml
+    receivers:
+      fluentforward:
+        endpoint: 0.0.0.0:24224
+    ```
+    Port 24224 is used for the FluentForward protocol. You can change it to a preferred port. Learn more about the FluentForward receiver [here](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver/fluentforwardreceiver).
+
+2. **Update the logs pipeline in `otel-collector-config.yaml`:**
+
+    ```yaml
+    service:
+      ...
+      logs:
+        receivers: [otlp, fluentforward]
+        processors: [batch]
+        exporters: [clickhouselogsexporter]
+    ```
+
+3. **Expose the port in `docker-compose.yaml`:**
+
+    ```yaml
+    otel-collector:
+      ...
+      ports:
+        - "24224:24224"
+    ```
+
+4. **Update FluentBit configuration:**
+
+    ```
+    [INPUT]
+      Name   dummy
+      Tag    dummy.log
+      Dummy {"message": "mylog", "trace_id": "0000000000000000f4dbb3edd765f620", "span_id": "43222c2d51a7abe3"}
+
+    [OUTPUT]
+      Name          forward
+      Match         *
+      Host          <otel-collector-host>
+      Port          24224
+    ```
+    Replace `<otel-collector-host>` with the host where the OpenTelemetry Collector is running. For more info, check the [troubleshooting guide](/docs/install/troubleshooting#signoz-otel-collector-address-grid).
+
+5. **Restart FluentBit and SigNoz.**
+
+6. **Use processors to transform logs:**
+
+    To transform your existing log model into the OpenTelemetry [log model](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/logs/data-model.md), use processors:
+
+    ```yaml
+    processors:
+      logstransform:
+        operators:
+          - type: trace_parser
+            trace_id:
+              parse_from: attributes.trace_id
+            span_id:
+              parse_from: attributes.span_id
+          - type: remove
+            field: attributes.trace_id
+          - type: remove
+            field: attributes.span_id
+    ```
+
+</TabItem>
+</Tabs>

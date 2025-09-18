@@ -1,0 +1,140 @@
+---
+date: 2024-06-06
+id: setting-up-tls-for-signoz
+title: Secure SigNoz in Kubernetes using Ingress NGINX and Cert Manager
+description: Set up TLS for SigNoz in Kubernetes using Ingress NGINX and Cert Manager
+---
+
+### Overview
+
+This tutorial will walk you through the process of setting up HTTPS (SSL/TLS) for your SigNoz installation in Kubernetes using two popular tools:
+- **[Ingress NGINX][1]**: A Kubernetes ingress controller that manages external access to services
+- **[Cert Manager][2]**: An automated certificate management tool that helps obtain and renew SSL/TLS certificates
+
+### Prerequisites
+
+Before you begin, ensure you have:
+- Kubernetes cluster with administrative access
+- Helm (version 3.8 or above) installed on your machine
+- SigNoz helm chart (version 0.4.3 or above)
+- A domain name pointed to your Kubernetes cluster for SigNoz (e.g., `signoz.example.com`)
+- A domain name pointed to your Kubernetes cluster for SigNoz OTel Collector (e.g., `signoz-ingest.example.com`)
+
+## Steps to Secure SigNoz
+
+### Install Cert-Manager
+
+1. Install cert-manager using Helm:
+
+```bash
+helm repo add jetstack https://charts.jetstack.io
+helm repo update
+helm install cert-manager jetstack/cert-manager \
+  --set crds.enabled=true \
+  --namespace cert-manager \
+  --create-namespace
+```
+
+You can find more details [here](https://cert-manager.io/docs/installation/)
+
+### Install Nginx Ingress Controller
+
+1. Install Nginx Ingress Controller using Helm:
+
+```bash
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+helm install ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx \
+  --create-namespace
+```
+
+You can find more details [here](https://kubernetes.github.io/ingress-nginx/deploy/)
+
+### Create Cluster Issuer
+
+1. Create a `ClusterIssuer` to automatically obtain SSL certificates. Save this as `cluster-issuer.yaml`. Below is an example of a simple ACME issuer:
+
+```yaml
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    email: user@example.com
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: example-issuer-account-key
+    solvers:
+    - http01:
+        ingress:
+          ingressClassName: nginx
+```
+You can find more details about cluster issuers [here](https://cert-manager.io/docs/configuration/)
+
+2. Apply the `ClusterIssuer` to your cluster:
+
+```bash
+kubectl apply -f cluster-issuer.yaml
+```
+
+### Enable SigNoz Ingress
+
+Update your `values.yaml` file with the following configurations:
+
+```yaml
+signoz:
+  ingress:
+    enabled: true
+    className: nginx
+    hosts:
+      - host: signoz.example.com  # Replace with your domain
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+            port: 8080
+    tls:
+      - secretName: signoz-tls-cert
+        hosts:
+          - signoz.example.com    # Replace with your domain
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-staging
+
+# Configure SigNoz OTel Collector Ingress
+otelCollector:
+  ingress:
+    enabled: true
+    className: nginx
+    hosts:
+      - host: signoz-ingest.example.com  # Replace with your ingestion domain
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+            port: 4317
+    tls:
+      - secretName: signoz-ingest-tls-cert
+        hosts:
+          - signoz-ingest.example.com    # Replace with your ingestion domain
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-staging
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/backend-protocol: "GRPC"
+```
+
+### Verify the setup
+
+After applying all configurations, verify your setup:
+
+1. Check certificate status:
+```bash
+kubectl get certificates -A
+```
+
+2. Ensure your domains are accessible via HTTPS:
+   - Dashboard: `https://signoz.example.com`
+   - Ingestion: `https://signoz-ingest.example.com`
+
+---
+[1]: https://github.com/kubernetes/ingress-nginx
+[2]: https://github.com/cert-manager/cert-manager

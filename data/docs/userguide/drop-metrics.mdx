@@ -1,0 +1,180 @@
+---
+date: 2024-06-06
+id: drop-metrics
+title: How to Drop and Filter OpenTelemetry Metrics
+---
+
+import GetHelp from '@/components/shared/get-help.md'
+
+This guide explains different methods to filter out or disable metrics in your OpenTelemetry instrumentation. You can either:
+- Filter metrics at the collector level using the OpenTelemetry Collector
+- Disable metrics generation at the SDK level for different programming languages
+
+## Filtering Metrics at the Collector Level
+
+The filter processor in OpenTelemetry allows you to drop metrics based on their name, label values, or other attributes. This is useful if you want to exclude certain metrics from being sent to SigNoz while still collecting them at the source.
+
+The filter processor is configured in the `processors::filter` section of the `otel-collector-config.yaml` file.
+
+<Admonition>
+
+The processor needs to be added to the metrics pipeline to take effect. 
+```
+metrics:
+  receivers: [otlp]
+  processors: [filter/drop_metrics_by_name, batch]
+  exporters: [otlp]
+```
+</Admonition>
+
+
+### Drop Metrics by Exact Name Match
+
+You can drop specific metrics by their exact names:
+
+```yaml
+processors:
+  filter/drop_metrics_by_name:
+    metrics:
+      exclude:
+        match_type: strict
+        metric_names:
+          - http.client.request.body.size
+          - http.client.response.body.size
+```
+
+### Drop Metrics by Pattern Match
+
+You can use regular expressions to drop metrics matching a pattern:
+
+```yaml
+processors:
+  filter/drop_metrics_by_name_regex:
+    metrics:
+      exclude:
+        match_type: regexp
+        metric_names:
+          - http.client.*
+```
+
+
+### Drop Metrics by Resource Attributes
+
+You can filter metrics based on resource attributes such as `service.name`, `host.name`, `k8s.pod.name`, etc:
+
+```yaml
+processors:
+  filter/drop_metrics_by_label_values:
+    metrics:
+      metric:
+        - resource.attributes["k8s.pod.name"] == "test-pod"
+```
+
+### Drop Metrics by Resource Attributes Pattern
+
+You can use regular expressions to match resource attributes:
+
+```yaml
+processors:
+  filter/drop_metrics_by_label_values_regex:
+    metrics:
+      metric:
+        - IsMatch(resource.attributes["k8s.pod.name"], "test-pod-.*")
+```
+
+### Drop Metrics by Metric Attributes
+
+You can filter metrics based on their attributes like `http.method`, `message.operation`, etc:
+
+```yaml
+processors:
+  filter/drop_metrics_by_label_values:
+    metrics:
+      datapoint:
+        - attributes["http.method"] == "GET"
+```
+
+### Drop Metrics by Metric Attributes Pattern
+
+You can use regular expressions to match metric attributes:
+
+```yaml
+processors:
+  filter/drop_metrics_by_label_values_regex:
+    metrics:
+      datapoint:
+        - IsMatch(attributes["http.method"], "GET|POST")
+```
+
+Refer to the [OpenTelemetry documentation](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/filterprocessor) for more details on how to configure the filter processor.
+
+## Disabling SDK-Generated Metrics
+
+In addition to filtering metrics at the collector level, you can also control metric generation at the SDK level. This can be particularly useful when you want to disable specific instrumentations or all metrics from your application.
+
+### Disable All Metrics
+
+If you want to completely disable metrics collection from the SDK while keeping tracing/logging enabled, you can set:
+
+```bash
+OTEL_METRICS_EXPORTER=none
+```
+
+This environment variable will prevent the SDK from generating any metrics, reducing the resource usage of your application.
+
+### Disable Specific Instrumentations
+
+To disable instruments from specific packages, you can use environment variables depending on your programming language:
+
+<Tabs>
+<TabItem value="python" label="Python">
+
+```bash
+# This will disable both traces and metrics from the system-metrics instrumentation
+OTEL_PYTHON_DISABLED_INSTRUMENTATIONS=system-metrics
+```
+
+For more configuration options, see the [Python SDK Configuration documentation](https://opentelemetry.io/docs/zero-code/python/configuration/#disabling-specific-instrumentations).
+
+</TabItem>
+<TabItem value="java" label="Java">
+
+```bash
+# Disable specific auto-instrumentations
+OTEL_INSTRUMENTATION_[NAME]_ENABLED=false
+# Example for disabling the akka-http instrumentation
+OTEL_INSTRUMENTATION_AKKA_HTTP_ENABLED=false
+
+# For Spring Boot applications, you can also use application.properties:
+otel.instrumentation.[name].enabled=false
+# Example for disabling the akka-http instrumentation in Spring Boot
+otel.instrumentation.akka-http.enabled=false
+```
+
+For more configuration options, see the [Java Agent Configuration documentation](https://opentelemetry.io/docs/zero-code/java/agent/disable/).
+
+</TabItem>
+<TabItem value="nodejs" label="Node.js">
+
+```bash
+# Disable specific instrumentations (comma-separated)
+OTEL_NODE_DISABLED_INSTRUMENTATIONS=http,express,dns
+```
+
+For more configuration options, see the [Node.js SDK Configuration documentation](https://opentelemetry.io/docs/zero-code/js/configuration/#disable-specific-instrumentations).
+
+</TabItem>
+<TabItem value=".net" label=".NET">
+
+```bash
+# Disable all auto generated metrics in .NET applications
+OTEL_DOTNET_AUTO_METRICS_ENABLED=false
+```
+
+For more configuration options, see the [.NET SDK Configuration documentation](https://opentelemetry.io/docs/zero-code/dotnet/configuration/#additional-settings).
+</TabItem>
+</Tabs>
+
+## Get Help
+
+<GetHelp />

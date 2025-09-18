@@ -1,0 +1,53 @@
+---
+date: 2024-06-06
+title: Aggregate Logs
+id: aggregate-logs
+---
+
+This section demonstrates how to perform aggregation operations on log data using the SigNoz Logs API. The example provided focuses on counting distinct components and grouping the results by `container_id`
+
+## Example of Aggregating Logs
+The following example illustrates how to count distinct `component` values and group them by `container_id`. This can be useful for understanding the distribution of different components across various containers.
+
+### Sample Payload
+This is the JSON payload for the example described above for Aggregating Logs
+
+```json
+{
+    "start": 1700734490000,
+    "end": 1700738090000,
+    "requestType": "scalar",
+    "variables": {},
+    "compositeQuery": {
+        "queries": [
+            {
+                "type": "builder_query",
+                "spec": {
+                    "name": "A",
+                    "signal": "logs",
+                    "aggregations": [
+                        {
+                            "expression": "count_distinct(component)",
+                            "alias": "distinct_components"
+                        }
+                    ],
+                    "groupBy": [
+                        {
+                            "name": "container_id",
+                        }
+                    ],
+                    "order": [
+                        {
+                            "key": {
+                                "name": "distinct_components"
+                            },
+                            "direction": "desc"
+                        }
+                    ],
+                    "disabled": false
+                }
+            }
+        ]
+    }
+}
+```

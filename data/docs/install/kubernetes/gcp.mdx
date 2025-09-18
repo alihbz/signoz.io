@@ -1,0 +1,45 @@
+---
+date: 2024-06-06
+id: gcp
+title: Deploying to GCP
+description: Instructions to install SigNoz on GKE cluster
+---
+
+import CommonPrerequisites from '@/components/shared/k8s-common-prerequisites.md'
+import K8sInstall from '@/components/shared/k8s-install.mdx'
+import K8sOtelDemo from '@/components/shared/k8s-oteldemo.mdx'
+import K8sNextSteps from '@/components/shared/k8s-next-steps.md'
+
+<HostingDecision />
+
+## Prerequisites
+
+- Set up a GKE cluster (see the [official GCP documentation][1] for more info).
+
+<CommonPrerequisites />
+
+## Install SigNoz
+
+<K8sInstall />
+
+
+## Additional Notes on GKE Autopilot
+
+- For GKE Autopilot, the default storage class is `gce-resizable` and the cloud is `gcp/autogke`.
+
+- GKE Autopilot automatically overriddes resource requests/limits. Therefore, it is important to ensure that the cluster has enough resource quota for the region where the cluster is deployed. Read more about it [here][3].
+
+
+## (Optional) Install OpenTelemetry Demo
+
+<K8sOtelDemo />
+
+## Next Steps
+
+<K8sNextSteps />
+
+---
+
+[1]: https://cloud.google.com/kubernetes-engine/
+[2]: https://github.com/SigNoz/charts/tree/main/charts/signoz#configuration
+[3]: https://cloud.google.com/kubernetes-engine/docs/concepts/autopilot-resource-requests#defaults

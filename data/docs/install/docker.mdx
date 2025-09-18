@@ -1,0 +1,127 @@
+---
+date: 2024-06-06
+title: Docker Standalone
+description:  Learn how to install SigNoz on Docker Standalone. Follow our detailed, step-by-step guide to set up SigNoz on macOS or Linux. Ensure smooth installation and start monitoring your applications effectively.
+id: docker-standalone
+slug: /install/docker
+---
+
+import CloneRepo from '@/components/shared/clone-repo.md'
+import RetentionInfo from '@/components/shared/retention-info.mdx'
+
+<HostingDecision />
+
+SigNoz can be installed on macOS or Linux computers, and there are two ways in which you can install SigNoz:
+
+ - You may execute a script that checks your environment, installs Docker Engine and Docker Compose on Linux, and runs the `docker compose up` command for you. 
+ - You may execute the `docker compose up` command yourself.
+
+Both methods are provided below.
+
+<Admonition type="info">
+SigNoz recommends you to use the [install script](#install-signoz-using-the-install-script) on macOS and the following Linux distributions:
+  - Ubuntu
+  - Debian
+  - OpenSuse
+  - CentOS
+  - SUSE Linux Enterprise Server (SLES)
+
+If you're using a different Linux distribution, see the [Install SigNoz Using Docker Compose](#install-signoz-using-docker-compose) section.
+</Admonition>
+
+## Prerequisites
+
+- A Linux or macOS machine. Microsoft Windows is not officially supported.
+- On macOS, you must manually install [Docker Engine](https://docs.docker.com/engine/install/)
+before you run the install script. The install script automatically installs Docker Engine on Linux.
+- A minimum of 4GB of memory must be allocated to Docker.
+{ /* <!-- Existing documentation is somehow unclear. Are there different memory requirements based on the operating system? --> */}
+- [Git client](https://desktop.github.com/)
+- Ensure that the ports `8080`, `4317` and `4318` are open on the machine where you install SigNoz.
+
+## Install SigNoz Using the Install Script
+
+<Admonition type="info">
+Please use non-root user (mainly for Git repository cloning), otherwise you may end up seeing file system permissions errors after the installation.
+</Admonition>
+
+1. <CloneRepo />
+
+2. Run the `install.sh` script:
+   ```bash
+   ./install.sh
+   ```
+
+## Install SigNoz Using Docker Compose
+
+<Admonition type="info">
+Before you install SigNoz, ensure that [Docker Compose](https://docs.docker.com/compose/install/) is installed on your machine.
+</Admonition>
+
+1. <CloneRepo />
+
+2. To install SigNoz, enter the `docker compose up` command, specifying the following:
+    - `-f` and the path to your configuration file
+    - `-d` to run containers in the background
+    - `--remove-orphans` to remove orphaned containers
+
+  ```bash
+  cd docker
+  docker compose up -d --remove-orphans
+  ```
+
+## Verify the Installation
+
+1. Ensure that your containers are running correctly. To view the status of your containers, run the following command:
+
+```bash
+docker ps
+```
+  The output should look similar to the following:
+
+```output
+CONTAINER ID   IMAGE                                        COMMAND                  CREATED          STATUS                    PORTS                                    NAMES
+afd3e434e853   signoz/signoz-otel-collector:0.111.24        "/signoz-collector -…"   47 minutes ago   Up 45 minutes             0.0.0.0:4317-4318->4317-4318/tcp         signoz-otel-collector
+c0b6e58d3d18   signoz/signoz:0.69.0                         "./query-service --c…"   47 minutes ago   Up 46 minutes (healthy)   8080/tcp                                 signoz-signoz
+69431900f6ef   clickhouse/clickhouse-server:24.1.2-alpine   "/entrypoint.sh"         47 minutes ago   Up 47 minutes (healthy)   8123/tcp, 9000/tcp, 9009/tcp             signoz-clickhouse
+8b69f876a3c7   bitnami/zookeeper:3.7.1                      "/opt/bitnami/script…"   47 minutes ago   Up 47 minutes (healthy)   2181/tcp, 2888/tcp, 3888/tcp, 8080/tcp   signoz-zookeeper-1
+```
+
+2. Wait for all the pods to be in running state, and then point your browser to `http://<IP-ADDRESS>:8080/` to access the dashboard, replacing `<IP-ADDRESS>` with the IP address of the machine where you installed SigNoz.
+
+  **Example**:
+    - If you're running SigNoz on your local machine, you should point your browser to `http://localhost:8080/`.
+    - If the IP address of the machine on which you're running SigNoz is `66.82.18.247`, you should point your browser to `http://66.82.18.247:8080/`
+
+{ /* <!--
+
+You should see a page similar to the one in the image below:
+
+--> */}
+
+{ /* 
+<!--
+How is this helpful? I suggest we create something similar to the Kubernetes section. Do we have a blog post to which I could link out?
+--> */}
+
+<RetentionInfo />
+
+## Install specific version of SigNoz
+
+1. <CloneRepo />
+
+2. Checkout to the specific version tag. For example, to install SigNoz version `v0.6.1`:
+	```
+	git checkout v0.6.1
+	```
+
+3. Run the `install.sh` script:
+
+	```bash
+	./install.sh
+	```
+
+## Next Steps
+- [Collect Telemetry from your Docker Clusters](/docs/collection-agents/docker/install/)
+- [Instrument Your Application](/docs/instrumentation/overview)
+- [Tutorials](/docs/tutorials/)

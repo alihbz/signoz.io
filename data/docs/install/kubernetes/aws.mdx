@@ -1,0 +1,41 @@
+---
+date: 2024-06-06
+id: aws
+title: Deploying to AWS
+description: Instructions to install SigNoz on EKS cluster
+---
+
+import CommonPrerequisites from '@/components/shared/k8s-common-prerequisites.md'
+import K8sInstall from '@/components/shared/k8s-install.mdx'
+import K8sOtelDemo from '@/components/shared/k8s-oteldemo.mdx'
+import K8sNextSteps from '@/components/shared/k8s-next-steps.md'
+
+<HostingDecision />
+
+## Prerequisites
+
+- Set up an EKS cluster (see the [official AWS documentation][1] for more info). Follow the "Managed nodes - Linux" guide.
+
+<CommonPrerequisites />
+
+- In case of K8s version `1.23` and above, you must install the Amazon EBS CSI driver
+  and provide relevant volume permissions to the role assigned to the Amazon EKS cluster
+  IAM role. To know more, refer to the [Amazon EBS CSI migration documentation][2].
+
+## Install SigNoz
+
+<K8sInstall />
+
+## (Optional) Install OpenTelemetry Demo
+
+<K8sOtelDemo />
+
+## Next Steps
+
+<K8sNextSteps/>
+
+---
+
+[1]: https://docs.aws.amazon.com/eks/latest/userguide/getting-started-eksctl.html
+[2]: https://docs.aws.amazon.com/eks/latest/userguide/ebs-csi-migration-faq.html
+[3]: https://github.com/SigNoz/charts/tree/main/charts/signoz#configuration
