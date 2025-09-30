@@ -19,7 +19,7 @@ function WorkspaceSetup({ isWorkspaceSetupDelayed, verificationError, isEmailVer
 
       <div className="text-md mt-[28px] w-full rounded-[6px] border border-[#1D212D] bg-signoz_ink-300 p-[24px]">
         {verificationError ? (
-          <div className="flex items-center gap-4 text-sm text-red-500">
+          <div className="flex items-center gap-4 text-sm text-signoz_cherry-500">
             <XCircleIcon size={24} /> {verificationError}
           </div>
         ) : (
