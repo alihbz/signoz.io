@@ -15,6 +15,7 @@ function WorkspaceSetupHome() {
   const [isEmailVerified, setIsEmailVerified] = useState(false)
   const [retryCount, setRetryCount] = useState(1)
   const [workspaceData, setWorkspaceData] = useState(null)
+  const [verificationError, setVerificationError] = useState<string | null>(null)
   const searchParams = useSearchParams()
 
   const code = searchParams.get('code')
@@ -22,31 +23,37 @@ function WorkspaceSetupHome() {
   const region = searchParams.get('region')
 
   const verifyEmail = async () => {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_CONTROL_PLANE_URL}/users/verify`, {
-      cache: 'no-store',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      method: 'PUT',
-      body: JSON.stringify({
-        code: code,
-        email: decodeURIComponent(email || ''),
-        region: {
-          name: region,
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_CONTROL_PLANE_URL}/users/verify`, {
+        cache: 'no-store',
+        headers: {
+          'Content-Type': 'application/json',
         },
-      }),
-    })
+        method: 'PUT',
+        body: JSON.stringify({
+          code: code,
+          email: decodeURIComponent(email || ''),
+          region: {
+            name: region,
+          },
+        }),
+      })
 
-    const data = await res.json()
+      const data = await res.json()
 
     if (data.status === 'error' && data.type !== 'already-exists') {
+        setIsEmailVerified(false)
+        setVerificationError(data.error || 'Email verification failed')
+        setIsPollingEnabled(false)
+      } else if (data.status === 'success') {
+        setIsEmailVerified(true)
+        setIsPollingEnabled(true)
+        setVerificationError(null)
+      }
+    } catch (error) {
       setIsEmailVerified(false)
-    } else if (data.status === 'success') {
-      setIsEmailVerified(true)
-      setIsPollingEnabled(true)
-    } else if (data.status === 'error' && data.type === 'already-exists') {
-      setIsEmailVerified(true)
-      setIsPollingEnabled(true)
+      setVerificationError(error.error || 'Failed to verify email. Please try again.')
+      setIsPollingEnabled(false)
     }
   }
 
@@ -105,7 +112,11 @@ function WorkspaceSetupHome() {
       {isWorkspaceReady ? (
         <WorkspaceReady workspaceData={workspaceData} userEmail={email} />
       ) : (
-        <WorkspaceSetup isWorkspaceSetupDelayed={isWorkspaceSetupDelayed} />
+        <WorkspaceSetup 
+          isWorkspaceSetupDelayed={isWorkspaceSetupDelayed}
+          verificationError={verificationError}
+          isEmailVerified={isEmailVerified}
+        />
       )}
     </Suspense>
   )
