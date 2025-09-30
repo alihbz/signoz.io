@@ -58,7 +58,7 @@ function WorkspaceSetupHome() {
   }
 
   const verifyWorkspaceSetup = async () => {
-    if (!code || !email) {
+    if (!code || !email || verificationError) {
       return
     }
 
@@ -101,7 +101,7 @@ function WorkspaceSetupHome() {
   }, [])
 
   useEffect(() => {
-    if (isEmailVerified && isPollingEnabled) {
+    if (isEmailVerified && isPollingEnabled && !verificationError) {
       verifyWorkspaceSetup()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
