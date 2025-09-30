@@ -76,36 +76,39 @@ function WorkspaceSetupHome() {
   }
 
   useEffect(() => {
-    // poll every 3s for the first minute, then every 15s for the next 4 minutes
-    // total polling time is 5 minutes
-    // 3s * 20 * 1 = 1 minute (20 polls)
-    // 15s * 4 * 4 = 4 minutes (16 polls)
-    if (retryCount <= 36) {
-      if (retryCount <= 20) {
-        setPollingInterval(3000)
-      } else {
-        setPollingInterval(15000)
-      }
+    let pollingTimer: NodeJS.Timeout | null = null;
 
-      setTimeout(verifyWorkspaceSetup, pollingInterval)
-    } else {
-      setIsWorkspaceSetupDelayed(true)
+    if (isEmailVerified && isPollingEnabled && !verificationError) {
+      // poll every 3s for the first minute, then every 15s for the next 4 minutes
+      // total polling time is 5 minutes
+      // 3s * 20 * 1 = 1 minute (20 polls)
+      // 15s * 4 * 4 = 4 minutes (16 polls)
+      if (retryCount <= 36) {
+        if (retryCount <= 20) {
+          setPollingInterval(3000)
+        } else {
+          setPollingInterval(15000)
+        }
+
+        pollingTimer = setTimeout(verifyWorkspaceSetup, pollingInterval)
+      } else {
+        setIsWorkspaceSetupDelayed(true)
+      }
+    }
+
+    return () => {
+      if (pollingTimer) {
+        clearTimeout(pollingTimer)
+      }
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [retryCount])
+  }, [retryCount, isEmailVerified, isPollingEnabled, verificationError])
 
   useEffect(() => {
     verifyEmail()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  useEffect(() => {
-    if (isEmailVerified && isPollingEnabled && !verificationError) {
-      verifyWorkspaceSetup()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEmailVerified, verificationError])
 
   return (
     <Suspense>
