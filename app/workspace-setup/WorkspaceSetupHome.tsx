@@ -105,7 +105,7 @@ function WorkspaceSetupHome() {
       verifyWorkspaceSetup()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEmailVerified])
+  }, [isEmailVerified, verificationError])
 
   return (
     <Suspense>
