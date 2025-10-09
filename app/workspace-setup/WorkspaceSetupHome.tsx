@@ -41,7 +41,7 @@ function WorkspaceSetupHome() {
 
       const data = await res.json()
 
-    if (data.status === 'error' && data.type !== 'already-exists') {
+      if (data.status === 'error' && data.type !== 'already-exists') {
         setIsEmailVerified(false)
         setVerificationError(data.error || 'Email verification failed')
         setIsPollingEnabled(false)
@@ -51,9 +51,17 @@ function WorkspaceSetupHome() {
         setVerificationError(null)
       }
     } catch (error) {
-      setIsEmailVerified(false)
-      setVerificationError(error.error || 'Failed to verify email. Please try again.')
-      setIsPollingEnabled(false)
+      const enablePolling = error?.error?.toLocaleLowerCase()?.startsWith('cannot assign more than') || error?.type === 'already-exists'
+
+      if (enablePolling) {
+        setIsPollingEnabled(true)
+        setIsEmailVerified(true)
+        setVerificationError(null)
+      } else {
+        setIsEmailVerified(false)
+        setVerificationError(error?.error || 'Email verification failed')
+        setIsPollingEnabled(false)
+      }
     }
   }
 
