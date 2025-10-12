@@ -24,7 +24,7 @@ function WorkspaceSetupHome() {
 
   const verifyEmail = async () => {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_CONTROL_PLANE_URL}/users/verify`, {
+      await fetch(`${process.env.NEXT_PUBLIC_CONTROL_PLANE_URL}/users/verify`, {
         cache: 'no-store',
         headers: {
           'Content-Type': 'application/json',
@@ -38,18 +38,9 @@ function WorkspaceSetupHome() {
           },
         }),
       })
-
-      const data = await res.json()
-
-      if (data.status === 'error' && data.type !== 'already-exists') {
-        setIsEmailVerified(false)
-        setVerificationError(data.error || 'Email verification failed')
-        setIsPollingEnabled(false)
-      } else if (data.status === 'success') {
-        setIsEmailVerified(true)
-        setIsPollingEnabled(true)
-        setVerificationError(null)
-      }
+      setIsEmailVerified(true)
+      setIsPollingEnabled(true)
+      setVerificationError(null)
     } catch (error) {
       const enablePolling = error?.error?.toLocaleLowerCase()?.startsWith('cannot assign more than') || error?.type === 'already-exists'
 
