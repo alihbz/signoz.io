@@ -689,6 +689,31 @@ module.exports = () => {
           source: "/guides/upstream-connect-error-or-disconnect-reset-before-headers-reset-reason-connection-failure-spring-boot-and-java-11/",
           destination: "/guides/upstream-connect-error/",
           permanent: true
+        },
+        {
+          source: '/docs/migration/migrate-from-signoz-self-host-to-signoz-cloud/',
+          destination: '/docs/switch-to-signoz/switch-from-signoz-self-host-to-signoz-cloud/',
+          permanent: true,
+        },
+        {
+          source: '/docs/migration/migrate-from-datadog-to-signoz/',
+          destination: '/docs/switch-to-signoz/switch-to-signoz-from-datadog/',
+          permanent: true,
+        },
+        {
+          source: '/docs/migration/migrate-from-grafana-to-signoz/',
+          destination: '/docs/switch-to-signoz/switch-to-signoz-from-grafana/',
+          permanent: true,
+        },
+        {
+          source: '/docs/migration/migrate-from-elk-to-signoz/',
+          destination: '/docs/switch-to-signoz/switch-to-signoz-from-elk/',
+          permanent: true,
+        },
+        {
+          source: '/docs/migration/migrate-from-newrelic-to-signoz/',
+          destination: '/docs/switch-to-signoz/switch-to-signoz-from-newrelic/',
+          permanent: true,
         }
       ]
     },

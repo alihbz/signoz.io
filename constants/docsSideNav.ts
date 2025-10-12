@@ -2842,7 +2842,7 @@ const docsSideNav = [
       },
       {
         type: 'doc',
-        route: '/docs/switch-to-signoz/switch-from-signoz-signoz-self-host-to-signoz-cloud',
+        route: '/docs/switch-to-signoz/switch-from-signoz-self-host-to-signoz-cloud',
         label: 'From Self-Hosted to Cloud',
       },
     ],
