@@ -967,6 +967,11 @@ const docsSideNav = [
                     route:
                       '/docs/instrumentation/manual-instrumentation/javascript/opentelemetry-nodejs',
                   },
+                  {
+                    type: 'doc',
+                    label: 'Exclude HTTP Endpoints',
+                    route: '/docs/instrumentation/manual-instrumentation/javascript/exclude-http-endpoints',
+                  },
                 ],
               },
             ],

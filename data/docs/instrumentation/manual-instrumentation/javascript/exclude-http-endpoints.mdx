@@ -1,0 +1,299 @@
+---
+date: 2025-10-14
+id: nodejs-exclude-http-endpoints
+title: Exclude HTTP Endpoints in Node.js
+description: Learn how to exclude specific HTTP endpoints from being instrumented in OpenTelemetry
+tags: [SigNoz Cloud, Self-Host]
+---
+
+import GetHelp from '@/components/shared/get-help.md'
+
+## Overview
+
+By default OpenTelemetry automatically instruments all incoming and outgoing HTTP requests. Endpoints like health checks, metrics, or readiness probes may not be useful for observability and can increase a lot of noise in trace data.
+
+In this guide, you will learn how to disable specific HTTP endpoints from tracing by disabling irrelevant endpoints using `HttpInstrumentation`.
+
+## How HttpInstrumentation Works
+
+`HttpInstrumentation` is a part of OpenTelemetry Node.js SDK which automatically tracks all incoming and outgoing HTTP requests.
+
+By customizing its option, we can exclude endpoints that are not relevant such as health checks, readiness probes, etc.
+
+The `ignoreIncomingRequestHook(req)` callback runs before spans are created for each request.
+
+If this function returns `true`, that specific request will be ignored and no span will be generated for that endpoint.
+
+## Prerequisites
+
+- Node.js version 18.0 or higher
+- OpenTelemetry SDK installed and configured
+
+## Exclude HTTP Endpoints
+
+The `ignoreIncomingRequestHook(req)` function gives access to each incoming request. We can match `req.url`, headers, or methods (GET, POST, etc.) to decide which request should be ignored from traces.
+
+The example URL endpoint pattern:
+
+```javascript
+// Ignore any requests starting with /internal or /health
+const httpInstrumentation = new HttpInstrumentation({
+  ignoreIncomingRequestHook(req) {
+    return req.url.startsWith('/health') || req.url.startsWith('/internal')
+  },
+})
+```
+
+## Implementation Guide
+
+### Install Dependencies
+
+Install required OpenTelemetry packages by running:
+
+```bash
+npm install --save @opentelemetry/sdk-node \
+  @opentelemetry/exporter-trace-otlp-http \
+  @opentelemetry/instrumentation-http \
+  @opentelemetry/instrumentation-express
+```
+
+### Configure HTTP Instrumentation
+
+Configure `ignoreIncomingRequestHook` function in `instrumentation.js` file:
+
+```javascript:instrumentation.js
+'use strict';
+const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
+const { NodeSDK } = require('@opentelemetry/sdk-node');
+const { ExpressInstrumentation } = require('@opentelemetry/instrumentation-express');
+const { HttpInstrumentation } = require('@opentelemetry/instrumentation-http');
+
+const expressInstrumentation = new ExpressInstrumentation({});
+
+const httpInstrumentation = new HttpInstrumentation({
+  ignoreIncomingRequestHook(req) {
+    // Exclude health check endpoints
+    const excludedPaths = [
+      /^\/health/,
+      /^\/healthz/,
+      /^\/ready/,
+      /^\/metrics/,
+      /^\/ping/,
+    ];
+
+    return excludedPaths.some(pattern => pattern.test(req.url));
+  },
+});
+
+// Configure OTLP exporter
+const traceExporter = new OTLPTraceExporter({
+  url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318/v1/traces',
+  headers: process.env.OTEL_EXPORTER_OTLP_HEADERS ?
+    Object.fromEntries(
+      process.env.OTEL_EXPORTER_OTLP_HEADERS.split(',').map(h => h.split('='))
+    ) : {},
+});
+
+const sdk = new NodeSDK({
+  traceExporter,
+  instrumentations: [expressInstrumentation, httpInstrumentation]
+});
+
+sdk.start();
+
+console.log('OpenTelemetry SDK started');
+
+process.on('SIGTERM', () => {
+  sdk
+    .shutdown()
+    .then(() => console.log('Tracing terminated'))
+    .catch((error) => console.log('Error terminating tracing', error))
+    .finally(() => process.exit(0));
+});
+
+module.exports = sdk;
+```
+
+In this example, any request path matching `/health`, `/ready`, `/metrics`, or `/ping` will be excluded from tracing. The `ignoreIncomingRequestHook` function receives the request object, and returns true to exclude an endpoint, or false to include it.
+
+Then require this file before any application code:
+
+```javascript:app.js
+require('./instrumentation.js');
+const express = require('express');
+const app = express();
+
+// ... rest of your application
+```
+
+Or run your application with:
+
+```bash
+export OTEL_TRACES_EXPORTER="otlp"
+export OTEL_EXPORTER_OTLP_ENDPOINT="https://ingest.<region>.signoz.cloud:443"
+export OTEL_EXPORTER_OTLP_HEADERS="signoz-ingestion-key=<your-ingestion-key>"
+export OTEL_NODE_RESOURCE_DETECTORS="env,host,os"
+export OTEL_SERVICE_NAME=“<service_name>”
+node -r ./instrumentation.js app.js
+```
+
+### Create a Sample Express Application
+
+Create `app.js` file with the following content:
+
+```javascript:app.js
+// app.js - Express application
+
+const express = require("express");
+const app = express();
+
+// Middleware
+app.use(express.json());
+
+// Routes
+app.get("/", (_req, res) => {
+  res.json({ message: "Hello World" });
+});
+
+app.get("/api/users", async (_req, res) => {
+  // Simulate an external API call
+  try {
+    const response = await fetch(
+      "https://jsonplaceholder.typicode.com/users/1",
+    );
+    const user = await response.json();
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/health", (_req, res) => {
+  res.json({ message: "healthy" });
+});
+
+app.post("/api/data", (req, res) => {
+  const data = req.body;
+  res.json({ received: data, timestamp: new Date().toISOString() });
+});
+
+app.listen(3002, () => {
+  console.log("Server running on http://localhost:3002");
+});
+```
+
+Examples for using SigNoz Cloud and Self-Hosted are given below.
+
+<Tabs entityName="plans">
+<TabItem value="signoz-cloud" label="SigNoz Cloud" default>
+
+### Send Traces to SigNoz Cloud
+
+Run the application to export telemetry data to SigNoz Cloud:
+
+```bash
+export OTEL_TRACES_EXPORTER="otlp"
+export OTEL_EXPORTER_OTLP_ENDPOINT="https://ingest.<region>.signoz.cloud:443"
+export OTEL_EXPORTER_OTLP_HEADERS="signoz-ingestion-key=<your-ingestion-key>"
+export OTEL_NODE_RESOURCE_DETECTORS="env,host,os"
+export OTEL_SERVICE_NAME=“<service_name>”
+node -r ./instrumentation.js app.js
+```
+
+This will disable HTTP endpoints mentioned in `excludedPaths` const:
+
+```javascript
+const excludedPaths = [/^\/health/, /^\/healthz/, /^\/ready/, /^\/metrics/, /^\/ping/]
+```
+
+<Admonition>
+
+- Set the `<region>` to match your SigNoz Cloud [region](https://signoz.io/docs/ingestion/signoz-cloud/overview/#endpoint)
+- Replace `<your-ingestion-key>` with your SigNoz [ingestion key](https://signoz.io/docs/ingestion/signoz-cloud/keys/)
+- `<service_name>` is name of your service
+
+</Admonition>
+</TabItem>
+<TabItem value='self-host' label='Self-Host'>
+
+### Send Traces to SigNoz Self-Hosted
+
+Run the application to export telemetry data to SigNoz:
+
+```bash
+export OTEL_TRACES_EXPORTER="otlp"
+export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318"
+export OTEL_NODE_RESOURCE_DETECTORS="env,host,os"
+export OTEL_SERVICE_NAME="my-api"
+node -r ./instrumentation.js app.js
+```
+
+This will disable HTTP endpoints mentioned in `excludedPaths` const:
+
+```javascript
+const excludedPaths = [/^\/health/, /^\/healthz/, /^\/ready/, /^\/metrics/, /^\/ping/]
+```
+
+</TabItem>
+</Tabs>
+
+## Validate Traces in SigNoz
+
+After running your app and make a few HTTP requests to endpoints such as `http://localhost:3002/`, `http://localhost:3002/health`, `http://localhost:3002/api/data`, etc.
+
+Then navigate to your SigNoz dashboard and visit Traces Explorer to see traces:
+
+<figure data-zoomable align="center">
+  <img
+    src="/img/docs/instrumentation/exclude-http-endpoints-nodejs.webp"
+    alt="Sample trace output showing HTTP endpoints except health checks"
+  />
+  <figcaption>
+    <i>Sample traces after excluding health checks</i>
+  </figcaption>
+</figure>
+
+## Troubleshooting
+
+If your application is not sending traces as expected or if you want to see verbose OpenTelemetry logs, you can enable verbose logs.
+
+Set the following environment variable before running the application:
+
+```bash
+export OTEL_LOG_LEVEL=debug
+```
+
+This enables verbose logging and prints detailed information about the OpenTelemetry SDK configuration, exporters, and any errors encountered during exporting of traces.
+
+<Admonition>
+  Debug mode is useful for verifying configuration and diagnosing missing spans. It's not
+  recommended to use in production.
+</Admonition>
+
+### Common Issues
+
+- No traces appearing in SigNoz
+
+  - Ensure `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` variables are set properly.
+
+- Invalid or missing ingestion key
+
+  - Double-check your ingestion key in `OTEL_EXPORTER_OTLP_HEADERS`.
+  - The format should be:
+
+  ```bash
+  export OTEL_EXPORTER_OTLP_HEADERS="signoz-ingestion-key=<your-ingestion-key>"
+  ```
+
+## What's Next
+
+Now that you have configured excluding specific HTTP endpoints, explore related topics to enhance Node.js setup.
+
+- [Node.js - Manual Instrumentation](https://signoz.io/docs/instrumentation/manual-instrumentation/javascript/opentelemetry-nodejs/)
+- [Instrument JavaScript](https://signoz.io/docs/instrumentation/opentelemetry-javascript/)
+- [Instrument Express](https://signoz.io/docs/instrumentation/opentelemetry-express/)
+- [Enable/Disable Libraries using environment variables](https://signoz.io/docs/instrumentation/manual-instrumentation/javascript/nodejs-selective-instrumentation/)
+
+## Get Help
+
+<GetHelp />
