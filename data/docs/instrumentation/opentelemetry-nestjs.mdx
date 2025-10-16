@@ -1,6 +1,7 @@
 ---
 date: 2024-06-06
 id: nestjs
+tags : [SigNoz Cloud, Self-Host]
 title: Nestjs OpenTelemetry Instrumentation
 description: Learn how to instrument your Nestjs application with OpenTelemetry and send telemetry data to SigNoz
 hide_table_of_contents: true
@@ -91,9 +92,9 @@ import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions'
 const exporterOptions = {
   //highlight-start
   url: 'https://ingest.<region>.signoz.cloud:443/v1/traces',
-     headers: {
-      "signoz-access-token": "<your-ingestion-key>"
-    }
+  headers: {
+    "signoz-ingestion-key": "<your-ingestion-key>"
+  }
   //highlight-end
 };
 
@@ -139,7 +140,7 @@ const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventi
 const exporterOptions = {
   url: 'https://ingest.<region>.signoz.cloud:443/v1/traces',
   headers: {
-      "signoz-access-token": "<your-ingestion-key>"
+      "signoz-ingestion-key": "<your-ingestion-key>"
     }
 }
 // highlight-end
@@ -958,7 +959,7 @@ const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventi
 // Enable all auto-instrumentations from the meta package
 const exporterOptions = {
   url: 'https://ingest.<region>.signoz.cloud:443/v1/traces',
-  headers: { 'signoz-access-token': '<your-ingestion-key>' },
+  headers: { 'signoz-ingestion-key': '<your-ingestion-key>' },
 };
 
 const traceExporter = new OTLPTraceExporter(exporterOptions);
