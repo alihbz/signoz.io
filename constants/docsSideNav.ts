@@ -1425,21 +1425,17 @@ const docsSideNav = [
     label: 'Metrics',
     type: 'category',
     isExpanded: false,
+    route: '/docs/metrics-management/overview',
     items: [
+      {
+        type: 'doc',
+        route: '/docs/metrics-management/overview',
+        label: 'Overview',
+      },
       {
         type: 'doc',
         route: '/docs/metrics-management/metrics-explorer',
         label: 'Metrics Explorer',
-      },
-      {
-        type: 'doc',
-        route: '/docs/userguide/send-metrics-cloud',
-        label: 'Send Metrics to SigNoz Cloud',
-      },
-      {
-        type: 'doc',
-        route: '/docs/userguide/send-metrics',
-        label: 'Send Metrics (Self Hosted)',
       },
       {
         type: 'doc',
@@ -1457,15 +1453,20 @@ const docsSideNav = [
         label: 'Cloud provider metric delay',
       },
       {
-        type: 'doc',
-        route: '/docs/metrics-management/configure-custom-buckets',
-        label: 'Configure custom buckets for histograms',
-      },
-      {
         label: 'Send Metrics',
         type: 'category',
         isExpanded: false,
         items: [
+          {
+            type: 'doc',
+            route: '/docs/userguide/send-metrics-cloud',
+            label: 'Send Metrics to SigNoz Cloud',
+          },
+          {
+            type: 'doc',
+            route: '/docs/userguide/send-metrics',
+            label: 'Send Metrics (Self Hosted)',
+          },
           {
             type: 'doc',
             className: 'new-doc',
@@ -1483,6 +1484,11 @@ const docsSideNav = [
             className: 'new-doc',
             route: '/docs/metrics-management/mysql-metrics',
             label: 'MySQL metrics',
+          },
+          {
+            type: 'doc',
+            route: '/docs/metrics-management/configure-custom-buckets',
+            label: 'Configure custom buckets for histograms',
           },
         ],
       },
