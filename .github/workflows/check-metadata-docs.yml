@@ -41,8 +41,8 @@ jobs:
           ALL_VALID=true
           CURRENT_DATE=$(date +%Y-%m-%d)
 
-          # Read files into array
-          readarray -t CHANGED_FILES <<< "${{ steps.changed-files.outputs.all_changed_files }}"
+          # Convert space-separated files to array
+          IFS=' ' read -ra CHANGED_FILES <<< "${{ steps.changed-files.outputs.all_changed_files }}"
 
           for file in "${CHANGED_FILES[@]}"; do
             [[ -z "$file" ]] && continue
