@@ -25,9 +25,26 @@ jobs:
 
       - name: Get changed documentation files
         id: changed-files
-        uses: tj-actions/changed-files@v46
-        with:
-          files: "data/docs/**/*.mdx"
+        run: |
+          # Get the base and head commits
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          
+          echo "Comparing $BASE_SHA...$HEAD_SHA"
+          
+          # Get changed files matching the pattern
+          CHANGED_FILES=$(git diff --name-only --diff-filter=ACMR "$BASE_SHA...$HEAD_SHA" | grep -E '^data/docs/.*\.mdx$' || true)
+          
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "any_changed=false" >> $GITHUB_OUTPUT
+            echo "No documentation files changed"
+          else
+            echo "any_changed=true" >> $GITHUB_OUTPUT
+            # Convert newlines to spaces for easier processing
+            FILES_SPACE_SEPARATED=$(echo "$CHANGED_FILES" | tr '\n' ' ' | sed 's/ $//')
+            echo "all_changed_files=$FILES_SPACE_SEPARATED" >> $GITHUB_OUTPUT
+            echo "Changed files: $FILES_SPACE_SEPARATED"
+          fi
 
       - name: Validate documentation metadata
         if: steps.changed-files.outputs.any_changed == 'true'
