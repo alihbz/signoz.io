@@ -106,15 +106,12 @@ function WorkspaceSetupHome() {
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [retryCount, isEmailVerified, isPollingEnabled, verificationError])
+  }, [retryCount])
 
   useEffect(() => {
-    if (isEmailVerified && isPollingEnabled) {
-      verifyWorkspaceSetup()
-    }
+    verifyEmail()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEmailVerified])
-
+  }, [])
   return (
     <Suspense>
       {isWorkspaceReady ? (
