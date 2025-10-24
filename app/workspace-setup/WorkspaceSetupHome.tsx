@@ -9,7 +9,7 @@ function WorkspaceSetupHome() {
   const [isWorkspaceReady, setIsWorkspaceReady] = useState(false)
   const [isWorkspaceSetupDelayed, setIsWorkspaceSetupDelayed] = useState(false)
   const [isPollingEnabled, setIsPollingEnabled] = useState(false)
-  const [pollingInterval, setPollingInterval] = useState(3000) // initial polling interval - 3 seconds
+  const [pollingInterval, setPollingInterval] = useState(0) // initial polling interval - 3 seconds
   const [isEmailVerified, setIsEmailVerified] = useState(false)
   const [retryCount, setRetryCount] = useState(1)
   const [workspaceData, setWorkspaceData] = useState(null)
@@ -107,11 +107,6 @@ function WorkspaceSetupHome() {
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [retryCount, isEmailVerified, isPollingEnabled, verificationError])
-
-  useEffect(() => {
-    verifyEmail()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   useEffect(() => {
     if (isEmailVerified && isPollingEnabled) {
