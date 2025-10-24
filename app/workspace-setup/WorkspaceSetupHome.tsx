@@ -23,36 +23,34 @@ function WorkspaceSetupHome() {
   const region = searchParams.get('region')
 
   const verifyEmail = async () => {
-    try {
-      await fetch(`${process.env.NEXT_PUBLIC_CONTROL_PLANE_URL}/users/verify`, {
-        cache: 'no-store',
-        headers: {
-          'Content-Type': 'application/json',
+    const res = await fetch(`${process.env.NEXT_PUBLIC_CONTROL_PLANE_URL}/users/verify`, {
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      method: 'PUT',
+      body: JSON.stringify({
+        code: code,
+        email: decodeURIComponent(email || ''),
+        region: {
+          name: region,
         },
-        method: 'PUT',
-        body: JSON.stringify({
-          code: code,
-          email: decodeURIComponent(email || ''),
-          region: {
-            name: region,
-          },
-        }),
-      })
+      }),
+    })
+
+    const data = await res.json()
+
+    if (data.status === 'error' && (data.type !== 'already-exists' || !data.error?.toLocaleLowerCase()?.startsWith('cannot assign more than'))) {
+      setIsEmailVerified(false)
+      setVerificationError(data.error || 'Email verification failed')
+    } else if (data.status === 'success') {
+      setVerificationError(null)
       setIsEmailVerified(true)
       setIsPollingEnabled(true)
+    } else if (data.status === 'error' && (data.type === 'already-exists' || data.error?.toLocaleLowerCase()?.startsWith('cannot assign more than'))) {
       setVerificationError(null)
-    } catch (error) {
-      const enablePolling = error?.error?.toLocaleLowerCase()?.startsWith('cannot assign more than') || error?.type === 'already-exists'
-
-      if (enablePolling) {
-        setIsPollingEnabled(true)
-        setIsEmailVerified(true)
-        setVerificationError(null)
-      } else {
-        setIsEmailVerified(false)
-        setVerificationError(error?.error || 'Email verification failed')
-        setIsPollingEnabled(false)
-      }
+      setIsEmailVerified(true)
+      setIsPollingEnabled(true)
     }
   }
 
