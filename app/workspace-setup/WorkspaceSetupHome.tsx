@@ -5,8 +5,6 @@ import { useSearchParams } from 'next/navigation'
 import WorkspaceReady from './WorkspaceReady'
 import WorkspaceSetup from './WorkspaceSetup'
 
-
-
 function WorkspaceSetupHome() {
   const [isWorkspaceReady, setIsWorkspaceReady] = useState(false)
   const [isWorkspaceSetupDelayed, setIsWorkspaceSetupDelayed] = useState(false)
@@ -40,14 +38,22 @@ function WorkspaceSetupHome() {
 
     const data = await res.json()
 
-    if (data.status === 'error' && (data.type !== 'already-exists' || !data.error?.toLocaleLowerCase()?.startsWith('cannot assign more than'))) {
+    if (
+      data.status === 'error' &&
+      data.type !== 'already-exists' &&
+      !data.error?.toLocaleLowerCase()?.startsWith('cannot assign more than')
+    ) {
       setIsEmailVerified(false)
       setVerificationError(data.error || 'Email verification failed')
     } else if (data.status === 'success') {
       setVerificationError(null)
       setIsEmailVerified(true)
       setIsPollingEnabled(true)
-    } else if (data.status === 'error' && (data.type === 'already-exists' || data.error?.toLocaleLowerCase()?.startsWith('cannot assign more than'))) {
+    } else if (
+      data.status === 'error' &&
+      (data.type === 'already-exists' ||
+        data.error?.toLocaleLowerCase()?.startsWith('cannot assign more than'))
+    ) {
       setVerificationError(null)
       setIsEmailVerified(true)
       setIsPollingEnabled(true)
@@ -73,7 +79,7 @@ function WorkspaceSetupHome() {
   }
 
   useEffect(() => {
-    let pollingTimer: NodeJS.Timeout | null = null;
+    let pollingTimer: NodeJS.Timeout | null = null
 
     if (isEmailVerified && isPollingEnabled && !verificationError) {
       // poll every 3s for the first minute, then every 15s for the next 4 minutes
@@ -112,7 +118,7 @@ function WorkspaceSetupHome() {
       {isWorkspaceReady ? (
         <WorkspaceReady workspaceData={workspaceData} userEmail={email} />
       ) : (
-        <WorkspaceSetup 
+        <WorkspaceSetup
           isWorkspaceSetupDelayed={isWorkspaceSetupDelayed}
           verificationError={verificationError}
           isEmailVerified={isEmailVerified}
