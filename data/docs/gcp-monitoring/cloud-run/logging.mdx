@@ -1,11 +1,10 @@
 ---
 date: 2024-09-08
 id: logging
-tags : [SigNoz Cloud, Self-Host]
+tags: [SigNoz Cloud, Self-Host]
 title: Cloud Run Logging
 hide_table_of_contents: true
 ---
-
 
 ## Overview
 
@@ -15,18 +14,18 @@ This documentation provides a detailed walkthrough on how to set up Cloud Run to
 <TabItem value="signoz-cloud" label="SigNoz Cloud" default>
 **Here's a quick summary of what we will be doing in this guide**
 
-* Create and configure Cloud Run
-* Create Pub/Sub topic
-* Create Log Router to route the Cloud Run service logs to SigNoz
-* Create Compute Engine instance
-* Create OTel Collector to route logs from Pub/Sub topic to SigNoz Cloud
-* Send and Visualize the logs in SigNoz Cloud
+- Create and configure Cloud Run
+- Create Pub/Sub topic
+- Create Log Router to route the Cloud Run service logs to SigNoz
+- Create Compute Engine instance
+- Create OTel Collector to route logs from Pub/Sub topic to SigNoz Cloud
+- Send and Visualize the logs in SigNoz Cloud
 
 ## Prerequisites
 
-* [Google Cloud account](https://console.cloud.google.com/) with administrative privilege or Cloud Run Admin, Artifact Registry Admin, Compute Engine Admin, Pub/Sub Admin and Logging Admin privileges.
-* [SigNoz Cloud Account](https://signoz.io/teams/) (we are using SigNoz Cloud for this demonstration, we will also need ingestion details. To get your **Ingestion Key** and **Ingestion URL,** sign-in to your SigNoz Cloud Account and go to **Settings** >> **Ingestion Settings**)
-* Access to a project in GCP
+- [Google Cloud account](https://console.cloud.google.com/) with administrative privilege or Cloud Run Admin, Artifact Registry Admin, Compute Engine Admin, Pub/Sub Admin and Logging Admin privileges.
+- [SigNoz Cloud Account](https://signoz.io/teams/) (we are using SigNoz Cloud for this demonstration, we will also need ingestion details. To get your **Ingestion Key** and **Ingestion URL,** sign-in to your SigNoz Cloud Account and go to **Settings** >> **Ingestion Settings**)
+- Access to a project in GCP
 
 ## Setup
 
@@ -51,7 +50,7 @@ resource.labels.service_name="<cloud-run-service-name>"
 
 ### Setup OTel Collector
 
-Follow the steps mentioned in the [Creating Compute Engine](https://signoz.io/docs/gcp-monitoring/bootstrapping/gce-creation/) document to create the Compute Engine instance. 
+Follow the steps mentioned in the [Creating Compute Engine](https://signoz.io/docs/gcp-monitoring/bootstrapping/gce-creation/) document to create the Compute Engine instance.
 
 #### Install OTel Collector as agent
 
@@ -74,18 +73,26 @@ Let us now proceed to the OTel Collector installation:
 Step 1: Download otel-collector tar.gz for your architecture
 
 ```bash
-wget https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.116.0/otelcol-contrib_0.116.0_linux_amd64.tar.gz
+wget https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.135.0/otelcol-contrib_0.135.0_linux_amd64.tar.gz
 ```
 
 Step 2: Extract otel-collector tar.gz to the otelcol-contrib folder
 
 ```bash
-mkdir otelcol-contrib && tar xvzf otelcol-contrib_0.116.0_linux_amd64.tar.gz -C otelcol-contrib
+mkdir otelcol-contrib && tar xvzf otelcol-contrib_0.135.0_linux_amd64.tar.gz -C otelcol-contrib
 ```
 
 Step 3: Create `config.yaml` in the folder `otelcol-contrib` with the below content in it. Replace `<region>` with the appropriate SigNoz Cloud region. Replace `SIGNOZ_INGESTION_KEY` with what is provided by SigNoz:
 
+<Admonition type="note">
+  Note: The googlecloudpubsub receiver’s encoding was updated from the deprecated raw_text to
+  text_encoding. This configuration has been tested and works with otelcol-contrib v0.135.0.
+</Admonition>
+
 ```yaml
+extensions:
+  text_encoding:
+    encoding: utf-8
 receivers:
   otlp:
     protocols:
@@ -96,22 +103,23 @@ receivers:
   googlecloudpubsub:
     project: <gcp-project-id>
     subscription: projects/<gcp-project-id>/subscriptions/<pubsub-topic's-subscription>
-    encoding: raw_text
+    encoding: text_encoding
 processors:
   batch: {}
   resource/env:
     attributes:
-    - key: deployment.environment
-      value: prod # can be dev, prod, staging etc. based on your environment
-      action: upsert
+      - key: deployment.environment
+        value: prod # can be dev, prod, staging etc. based on your environment
+        action: upsert
 exporters:
   otlp:
-    endpoint: "ingest.<region>.signoz.cloud:443"
+    endpoint: 'ingest.<region>.signoz.cloud:443'
     tls:
       insecure: false
     headers:
-      "signoz-ingestion-key": "<SigNoz-Key>"
+      'signoz-ingestion-key': '<SigNoz-Key>'
 service:
+  extensions: [text_encoding]
   pipelines:
     traces:
       receivers: [otlp]
@@ -154,15 +162,13 @@ tail -f -n 50 otelcol-output.log
 You can now trigger the Cloud Run service URL a few times, and see the logs from the Cloud Run service on SigNoz Cloud.
 
 <figure data-zoomable align="left">
-    <img
-        src="/img/docs/gcp-monitoring/cloud-run/logging/cloud-run-signoz-cloud-logs.webp"
-        alt="Cloud Run Logs in SigNoz Cloud"
-    />
-<figcaption>
-<i>
-Cloud Run Logs in SigNoz Cloud
-</i>
-</figcaption>
+  <img
+    src="/img/docs/gcp-monitoring/cloud-run/logging/cloud-run-signoz-cloud-logs.webp"
+    alt="Cloud Run Logs in SigNoz Cloud"
+  />
+  <figcaption>
+    <i>Cloud Run Logs in SigNoz Cloud</i>
+  </figcaption>
 </figure>
 
 </TabItem>
@@ -170,22 +176,24 @@ Cloud Run Logs in SigNoz Cloud
 <TabItem value='self-host' label='Self-Host'>
 **Here's a quick summary of what we will be doing in this guide**
 
-* Create and configure Cloud Run
-* Create Pub/Sub topic
-* Setup Log Router to route the Cloud Run logs to SigNoz
-* Self-Host SigNoz
-* Create OTel Collector to route logs from Pub/Sub topic to self hosted SigNoz
-* Send and Visualize the logs in SigNoz
+- Create and configure Cloud Run
+- Create Pub/Sub topic
+- Setup Log Router to route the Cloud Run logs to SigNoz
+- Self-Host SigNoz
+- Create OTel Collector to route logs from Pub/Sub topic to self hosted SigNoz
+- Send and Visualize the logs in SigNoz
 
 ## Prerequisites
 
-
-* [Google Cloud account](https://console.cloud.google.com/) with administrative privilege or Cloud Run Admin, Artifact Registry Admin, Compute Engine Admin, Pub/Sub Admin and Logging Admin privileges.
-* Access to a project in GCP
-* [Self-Hosted SigNoz](https://signoz.io/docs/install/docker/) 
+- [Google Cloud account](https://console.cloud.google.com/) with administrative privilege or Cloud Run Admin, Artifact Registry Admin, Compute Engine Admin, Pub/Sub Admin and Logging Admin privileges.
+- Access to a project in GCP
+- [Self-Hosted SigNoz](https://signoz.io/docs/install/docker/)
 
 <Admonition type="info">
-For more details on how to configure Self-Hosted SigNoz for Logs, check [official documentation by Self-Hosted SigNoz](https://signoz.io/docs/userguide/send-logs-http/#send-logs-to-self-hosted-signoz) and navigate to the "Send Logs to Self-Hosted SigNoz" section.
+  For more details on how to configure Self-Hosted SigNoz for Logs, check [official documentation by
+  Self-Hosted
+  SigNoz](https://signoz.io/docs/userguide/send-logs-http/#send-logs-to-self-hosted-signoz) and
+  navigate to the "Send Logs to Self-Hosted SigNoz" section.
 </Admonition>
 
 ## Setup
@@ -211,7 +219,7 @@ resource.labels.service_name="<cloud-run-service-name>"
 
 ### Setup OTel Collector
 
-Follow the steps mentioned in the [Creating Compute Engine](https://signoz.io/docs/gcp-monitoring/bootstrapping/gce-creation/) document to create the Compute Engine instance. 
+Follow the steps mentioned in the [Creating Compute Engine](https://signoz.io/docs/gcp-monitoring/bootstrapping/gce-creation/) document to create the Compute Engine instance.
 
 #### Install OTel Collector as agent
 
@@ -234,18 +242,26 @@ Let us now proceed to the OTel Collector installation:
 Step 1: Download otel-collector tar.gz for your architecture
 
 ```bash
-wget https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.116.0/otelcol-contrib_0.116.0_linux_amd64.tar.gz
+wget https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.135.0/otelcol-contrib_0.135.0_linux_amd64.tar.gz
 ```
 
 Step 2: Extract otel-collector tar.gz to the otelcol-contrib folder
 
 ```bash
-mkdir otelcol-contrib && tar xvzf otelcol-contrib_0.116.0_linux_amd64.tar.gz -C otelcol-contrib
+mkdir otelcol-contrib && tar xvzf otelcol-contrib_0.135.0_linux_amd64.tar.gz -C otelcol-contrib
 ```
 
 Step 3: Create `config.yaml` in the folder `otelcol-contrib` with the below content in it. We are using the `clickhouselogsexporter` in this case.
 
+<Admonition type="note">
+  Note: The googlecloudpubsub receiver’s encoding was updated from the deprecated raw_text to
+  text_encoding. This configuration has been tested and works with otelcol-contrib v0.135.0.
+</Admonition>
+
 ```yaml
+extensions:
+  text_encoding:
+    encoding: utf-8
 receivers:
   otlp:
     protocols:
@@ -256,14 +272,14 @@ receivers:
   googlecloudpubsub:
     project: <gcp-project-id>
     subscription: projects/<gcp-project-id>/subscriptions/<pubsub-topic's-subscription>
-    encoding: raw_text
+    encoding: text_encoding
 processors:
   batch: {}
   resource/env:
     attributes:
-    - key: deployment.environment
-      value: prod # can be dev, prod, staging etc. based on your environment
-      action: upsert
+      - key: deployment.environment
+        value: prod # can be dev, prod, staging etc. based on your environment
+        action: upsert
 exporters:
   clickhouselogsexporter:
     dsn: tcp://clickhouse:9000/
@@ -276,6 +292,7 @@ exporters:
       max_interval: 30s
       max_elapsed_time: 300s
 service:
+  extensions: [text_encoding]
   pipelines:
     logs:
       receivers: [otlp, googlecloudpubsub]
