@@ -79,7 +79,7 @@ function WorkspaceSetupHome() {
   }
 
   useEffect(() => {
-    let pollingTimer: NodeJS.Timeout | null = null
+    let pollingTimer: ReturnType<typeof setTimeout> | null = null
 
     if (isEmailVerified && isPollingEnabled && !verificationError) {
       // poll every 3s for the first minute, then every 15s for the next 4 minutes
