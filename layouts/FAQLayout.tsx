@@ -31,10 +31,18 @@ interface LayoutProps {
   children: ReactNode
   toc: tocItemProps[]
   relatedArticles?: RelatedArticleProps[]
+  tags: string[]
 }
 
-export default function FAQLayout({ content, authors, children, toc, tags }: LayoutProps) {
-  const { slug, date, title, readingTime, relatedArticles } = content
+export default function FAQLayout({
+  content,
+  authors,
+  children,
+  toc,
+  tags,
+  relatedArticles,
+}: LayoutProps) {
+  const { slug, date, title, readingTime } = content
   const mainRef = useRef<HTMLElement | null>(null)
   const [isTocVisible, setIsTocVisible] = useState(true)
   const lastScrollY = useRef(0)

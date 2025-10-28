@@ -306,9 +306,16 @@ export default async function Page({ params }: { params: { slug: string[] } }) {
       <FAQLayout
         content={mainContent}
         authorDetails={authorDetails}
-        authors={authorSlugs}
+        authors={content.authors?.map((author) => author?.name) || []}
         toc={toc}
         tags={content.tags?.map((tag) => tag?.value) || []}
+        relatedArticles={
+          content.related_faqs?.map((faq) => ({
+            title: faq?.title,
+            publishedOn: faq?.date,
+            url: `/faqs/${faq?.path}`,
+          })) || []
+        }
       >
         <div className="prose max-w-none dark:prose-invert prose-headings:scroll-mt-16">
           {compiledContent}
