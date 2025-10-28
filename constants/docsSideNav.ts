@@ -211,6 +211,25 @@ const docsSideNav = [
             label: 'Troubleshooting',
             route: '/docs/install/troubleshooting',
           },
+          {
+            type: 'category',
+            label: 'Capacity Planning',
+            isExpanded: false,
+            items: [
+              {
+                type: 'category',
+                label: 'Community Edition',
+                isExpanded: false,
+                items: [
+                  {
+                    type: 'doc',
+                    label: 'SigNoz Resources Planning',
+                    route: '/docs/setup/capacity-planning/community/resources-planning',
+                  },
+                ],
+              },
+            ],
+          },
         ],
       },
     ],
