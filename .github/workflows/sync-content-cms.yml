@@ -1,6 +1,6 @@
-# GitHub Actions Workflow: Sync Content to Strapi CMS (Using Vercel Env Vars)
+# GitHub Actions Workflow: Sync Content to Strapi CMS
 # This workflow syncs content changes from specific data folders to Strapi CMS
-# Environment variables are fetched from Vercel project settings
+# Environment variables are managed as GitHub Secrets
 # Triggers: On labeled PR, on push to staging/main branches
 
 name: Sync Content to Strapi CMS
@@ -13,22 +13,24 @@ on:
       - 'data/**/*.md'
   push:
     branches:
-      - test/cms-with-isr  # Change to production branch
-      - test/cms-with-isr  # Change to staging branch
+      - test/cms-with-isr  # Configurable: Change to your production branch
+      - test/cms-with-isr  # Configurable: Change to your staging branch
     paths:
       - 'data/**/*.mdx'
       - 'data/**/*.md'
 
 env:
-  # Array of folders to sync to CMS
-  SYNC_FOLDERS: '["faqs"]'  # Add more folders here like - '["faqs", "blogs", "docs"]'
+  SYNC_FOLDERS: '["faqs"]'  # Add more folders like: '["faqs", "blogs", "docs"]'
   
-  # Vercel Configuration (only these are stored as GitHub Secrets)
-  VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-  # VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}  # Optional: Required for team projects
+  # Strapi Configuration
+  CMS_API_URL: ${{ secrets.CMS_API_URL }}
+  CMS_API_TOKEN: ${{ secrets.CMS_API_TOKEN }}
   
-  # Branch Configuration - change later
+  # Revalidation Configuration
+  NEXT_PUBLIC_BASE_URL: ${{ secrets.NEXT_PUBLIC_BASE_URL }}
+  REVALIDATE_SECRET: ${{ secrets.REVALIDATE_SECRET }}
+  
+  # Branch Configuration (configurable)
   PRODUCTION_BRANCH: 'test/cms-with-isr'
   STAGING_BRANCH: 'test/cms-with-isr'
 
@@ -107,115 +109,10 @@ jobs:
           echo "📝 Changed files detected:"
           echo '${{ steps.changed-files.outputs.all_changed_files }}' | jq -r '.[]'
 
-  fetch-vercel-env:
-    name: Fetch Vercel Environment Variables
-    runs-on: ubuntu-latest
-    needs: detect-changes
-    if: needs.detect-changes.outputs.any_changed == 'true' && needs.detect-changes.outputs.should_sync == 'true'
-    outputs:
-      env_vars: ${{ steps.get-env.outputs.env_vars }}
-    
-    steps:
-      - name: Fetch Environment Variables from Vercel
-        id: get-env
-        run: |
-          echo "🔐 Fetching environment variables from Vercel..."
-          
-          # Validate required inputs
-          if [ -z "${{ env.VERCEL_TOKEN }}" ] || [ -z "${{ env.VERCEL_PROJECT_ID }}" ]; then
-            echo "❌ Error: VERCEL_TOKEN and VERCEL_PROJECT_ID are required"
-            exit 1
-          fi
-          
-          # Determine which environment to pull based on deployment status
-          VERCEL_ENV="production"
-          if [[ "${{ needs.detect-changes.outputs.deployment_status }}" == "staging" ]]; then
-            VERCEL_ENV="preview"
-          elif [[ "${{ needs.detect-changes.outputs.deployment_status }}" == "draft" ]]; then
-            VERCEL_ENV="preview"
-          fi
-          
-          echo "📦 Fetching environment: $VERCEL_ENV"
-          
-          # Construct API URL
-          if [ -n "${{ env.VERCEL_ORG_ID }}" ]; then
-            API_URL="https://api.vercel.com/v9/projects/${{ env.VERCEL_PROJECT_ID }}/env?teamId=${{ env.VERCEL_ORG_ID }}"
-          else
-            API_URL="https://api.vercel.com/v9/projects/${{ env.VERCEL_PROJECT_ID }}/env"
-          fi
-          
-          # Fetch environment variables from Vercel API
-          RESPONSE=$(curl -s -H "Authorization: Bearer ${{ env.VERCEL_TOKEN }}" "$API_URL")
-          
-          # Check if request was successful
-          if echo "$RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
-            ERROR_MSG=$(echo "$RESPONSE" | jq -r '.error.message')
-            echo "❌ Error fetching environment variables: $ERROR_MSG"
-            exit 1
-          fi
-          
-          # Extract environment variables for the target environment
-          # We need: NEXT_PUBLIC_SIGNOZ_CMS_API_URL, CMS_API_TOKEN, NEXT_PUBLIC_BASE_URL, REVALIDATE_SECRET
-          
-          echo "🔍 Extracting required environment variables..."
-          
-          NEXT_PUBLIC_SIGNOZ_CMS_API_URL=$(echo "$RESPONSE" | jq -r --arg env "$VERCEL_ENV" \
-            '.envs[] | select(.key == "NEXT_PUBLIC_SIGNOZ_CMS_API_URL" and (.target[] | contains($env))) | .value' | head -n 1)
-          
-          CMS_API_TOKEN=$(echo "$RESPONSE" | jq -r --arg env "$VERCEL_ENV" \
-            '.envs[] | select(.key == "CMS_API_TOKEN" and (.target[] | contains($env))) | .value' | head -n 1)
-          
-          NEXT_PUBLIC_BASE_URL=$(echo "$RESPONSE" | jq -r --arg env "$VERCEL_ENV" \
-            '.envs[] | select(.key == "NEXT_PUBLIC_BASE_URL" and (.target[] | contains($env))) | .value' | head -n 1)
-          
-          REVALIDATE_SECRET=$(echo "$RESPONSE" | jq -r --arg env "$VERCEL_ENV" \
-            '.envs[] | select(.key == "REVALIDATE_SECRET" and (.target[] | contains($env))) | .value' | head -n 1)
-          
-          # Validate that we got all required variables
-          MISSING_VARS=()
-          [ -z "$NEXT_PUBLIC_SIGNOZ_CMS_API_URL" ] && MISSING_VARS+=("NEXT_PUBLIC_SIGNOZ_CMS_API_URL")
-          [ -z "$CMS_API_TOKEN" ] && MISSING_VARS+=("CMS_API_TOKEN")
-          [ -z "$NEXT_PUBLIC_BASE_URL" ] && MISSING_VARS+=("NEXT_PUBLIC_BASE_URL")
-          [ -z "$REVALIDATE_SECRET" ] && MISSING_VARS+=("REVALIDATE_SECRET")
-          
-          if [ ${#MISSING_VARS[@]} -gt 0 ]; then
-            echo "❌ Error: The following required environment variables are not set in Vercel ($VERCEL_ENV environment):"
-            printf '   • %s\n' "${MISSING_VARS[@]}"
-            echo ""
-            echo "Please add these variables to your Vercel project settings:"
-            echo "https://vercel.com/dashboard → Your Project → Settings → Environment Variables"
-            exit 1
-          fi
-          
-          echo "✅ Successfully fetched all required environment variables"
-          echo "   • NEXT_PUBLIC_SIGNOZ_CMS_API_URL: ${NEXT_PUBLIC_SIGNOZ_CMS_API_URL:0:30}..."
-          echo "   • CMS_API_TOKEN: ***"
-          echo "   • NEXT_PUBLIC_BASE_URL: $NEXT_PUBLIC_BASE_URL"
-          echo "   • REVALIDATE_SECRET: ***"
-          
-          # Export as JSON for next job (mask sensitive values in output)
-          ENV_JSON=$(jq -n \
-            --arg strapi_url "$NEXT_PUBLIC_SIGNOZ_CMS_API_URL" \
-            --arg strapi_token "$CMS_API_TOKEN" \
-            --arg base_url "$NEXT_PUBLIC_BASE_URL" \
-            --arg revalidation_key "$REVALIDATE_SECRET" \
-            '{
-              NEXT_PUBLIC_SIGNOZ_CMS_API_URL: $strapi_url,
-              CMS_API_TOKEN: $strapi_token,
-              NEXT_PUBLIC_BASE_URL: $base_url,
-              REVALIDATE_SECRET: $revalidation_key
-            }')
-          
-          # Use GitHub's masking to hide sensitive values in logs
-          echo "::add-mask::$CMS_API_TOKEN"
-          echo "::add-mask::$REVALIDATE_SECRET"
-          
-          echo "env_vars=$ENV_JSON" >> $GITHUB_OUTPUT
-
   sync-to-cms:
     name: Sync Content to CMS
     runs-on: ubuntu-latest
-    needs: [detect-changes, fetch-vercel-env]
+    needs: detect-changes
     if: needs.detect-changes.outputs.any_changed == 'true' && needs.detect-changes.outputs.should_sync == 'true'
     
     steps:
@@ -242,7 +139,6 @@ jobs:
         env:
           CHANGED_FILES: ${{ needs.detect-changes.outputs.changed_files }}
           DEPLOYMENT_STATUS: ${{ needs.detect-changes.outputs.deployment_status }}
-          ENV_VARS: ${{ needs.fetch-vercel-env.outputs.env_vars }}
         run: |
           node << 'EOF'
           const fs = require('fs');
@@ -250,12 +146,9 @@ jobs:
           const matter = require('gray-matter');
           const axios = require('axios');
           
-          // Parse environment variables from Vercel
-          const ENV_VARS = JSON.parse(process.env.ENV_VARS);
-          const NEXT_PUBLIC_SIGNOZ_CMS_API_URL = ENV_VARS.NEXT_PUBLIC_SIGNOZ_CMS_API_URL;
-          const CMS_API_TOKEN = ENV_VARS.CMS_API_TOKEN;
-          
           // Configuration
+          const CMS_API_URL = process.env.CMS_API_URL;
+          const CMS_API_TOKEN = process.env.CMS_API_TOKEN;
           const SYNC_FOLDERS = JSON.parse(process.env.SYNC_FOLDERS);
           const DEPLOYMENT_STATUS = process.env.DEPLOYMENT_STATUS;
           const CHANGED_FILES = JSON.parse(process.env.CHANGED_FILES);
@@ -268,6 +161,11 @@ jobs:
               fields: ['title', 'description', 'date', 'path', 'content', 'deployment_status']
             }
             // Add more collection schemas here as needed
+            // blogs: {
+            //   apiPath: 'api::blog.blog',
+            //   endpoint: 'blogs',
+            //   fields: ['title', 'date', 'path', 'content', 'deployment_status']
+            // }
           };
           
           // Helper: Extract folder name from file path
@@ -281,6 +179,7 @@ jobs:
           
           // Helper: Generate path field from file path
           function generatePathField(filePath, folderName) {
+            // Example: data/faqs/hidden-costs/file.mdx -> /hidden-costs/file
             const parts = filePath.split('/');
             const folderIndex = parts.indexOf(folderName);
             if (folderIndex === -1) return null;
@@ -318,6 +217,7 @@ jobs:
               ...frontmatter
             };
             
+            // Ensure all required fields are present
             const missingFields = schema.fields.filter(field => 
               field !== 'deployment_status' && !(field in data)
             );
@@ -334,7 +234,7 @@ jobs:
             const schema = COLLECTION_SCHEMAS[folderName];
             try {
               const response = await axios.get(
-                `${NEXT_PUBLIC_SIGNOZ_CMS_API_URL}/api/${schema.endpoint}`,
+                `${CMS_API_URL}/api/${schema.endpoint}`,
                 {
                   params: {
                     filters: { path: { $eq: pathField } },
@@ -361,7 +261,7 @@ jobs:
             const schema = COLLECTION_SCHEMAS[folderName];
             try {
               const response = await axios.post(
-                `${NEXT_PUBLIC_SIGNOZ_CMS_API_URL}/api/${schema.endpoint}`,
+                `${CMS_API_URL}/api/${schema.endpoint}`,
                 { data },
                 {
                   headers: {
@@ -382,7 +282,7 @@ jobs:
             const schema = COLLECTION_SCHEMAS[folderName];
             try {
               const response = await axios.put(
-                `${NEXT_PUBLIC_SIGNOZ_CMS_API_URL}/api/${schema.endpoint}/${entryId}`,
+                `${CMS_API_URL}/api/${schema.endpoint}/${entryId}`,
                 { data },
                 {
                   headers: {
@@ -403,7 +303,7 @@ jobs:
             const schema = COLLECTION_SCHEMAS[folderName];
             try {
               const response = await axios.delete(
-                `${NEXT_PUBLIC_SIGNOZ_CMS_API_URL}/api/${schema.endpoint}/${entryId}`,
+                `${CMS_API_URL}/api/${schema.endpoint}/${entryId}`,
                 {
                   headers: {
                     'Authorization': `Bearer ${CMS_API_TOKEN}`,
@@ -418,11 +318,14 @@ jobs:
             }
           }
           
-          // Helper: Detect operation type
+          // Helper: Detect operation type (create, update, delete)
           function detectOperationType(filePath) {
             if (!fs.existsSync(filePath)) {
               return 'delete';
             }
+            
+            // Check if file was newly added (this is simplified; in real workflow, compare with base)
+            // For this implementation, we'll default to update and handle create in the sync logic
             return 'create_or_update';
           }
           
@@ -445,6 +348,7 @@ jobs:
               try {
                 const folderName = getFolderName(filePath);
                 
+                // Check if folder should be synced
                 if (!folderName || !SYNC_FOLDERS.includes(folderName)) {
                   console.log(`⏭️ Skipped: Folder '${folderName}' not in sync list`);
                   results.skipped.push(filePath);
@@ -459,6 +363,7 @@ jobs:
                 const operationType = detectOperationType(filePath);
                 
                 if (operationType === 'delete') {
+                  // Handle deletion
                   console.log(`🗑️ Deleting from CMS: ${pathField}`);
                   const existingEntry = await findEntryByPath(folderName, pathField);
                   
@@ -471,17 +376,21 @@ jobs:
                     results.skipped.push(filePath);
                   }
                 } else {
+                  // Handle create or update
                   const { frontmatter, content } = parseMDXFile(filePath);
                   const strapiData = mapToStrapiSchema(folderName, frontmatter, content, pathField);
                   
+                  // Check if entry exists
                   const existingEntry = await findEntryByPath(folderName, pathField);
                   
                   if (existingEntry) {
+                    // Update existing entry
                     console.log(`🔄 Updating in CMS: ${pathField}`);
                     await updateEntry(folderName, existingEntry.id, strapiData);
                     console.log(`✅ Updated successfully`);
                     results.updated.push(filePath);
                   } else {
+                    // Create new entry
                     console.log(`➕ Creating in CMS: ${pathField}`);
                     await createEntry(folderName, strapiData);
                     console.log(`✅ Created successfully`);
@@ -505,6 +414,7 @@ jobs:
             console.log(`❌ Errors: ${results.errors.length}`);
             console.log('='.repeat(60) + '\n');
             
+            // Fail if there were errors
             if (results.errors.length > 0) {
               console.error('\n❌ SYNC FAILED - The following errors occurred:\n');
               results.errors.forEach(({ file, error }) => {
@@ -517,9 +427,9 @@ jobs:
           }
           
           // Validate environment variables
-          if (!NEXT_PUBLIC_SIGNOZ_CMS_API_URL || !CMS_API_TOKEN) {
-            console.error('❌ ERROR: Missing required environment variables from Vercel');
-            console.error('   Required: NEXT_PUBLIC_SIGNOZ_CMS_API_URL, CMS_API_TOKEN');
+          if (!CMS_API_URL || !CMS_API_TOKEN) {
+            console.error('❌ ERROR: Missing required environment variables');
+            console.error('   Required: CMS_API_URL, CMS_API_TOKEN');
             process.exit(1);
           }
           
@@ -536,21 +446,15 @@ jobs:
 
       - name: Trigger Revalidation
         if: success()
-        env:
-          ENV_VARS: ${{ needs.fetch-vercel-env.outputs.env_vars }}
         run: |
           echo "🔄 Triggering ISR revalidation..."
           
-          # Parse environment variables
-          NEXT_PUBLIC_BASE_URL=$(echo '${{ needs.fetch-vercel-env.outputs.env_vars }}' | jq -r '.NEXT_PUBLIC_BASE_URL')
-          REVALIDATE_SECRET=$(echo '${{ needs.fetch-vercel-env.outputs.env_vars }}' | jq -r '.REVALIDATE_SECRET')
-          
-          RESPONSE=$(curl -s -w "\n%{http_code}" --location "$NEXT_PUBLIC_BASE_URL/api/revalidate" \
+          RESPONSE=$(curl -s -w "\n%{http_code}" --location "${{ env.NEXT_PUBLIC_BASE_URL }}/api/revalidate" \
             --header 'Content-Type: application/json' \
             --data "{
               \"revalidateAll\": true,
               \"clearCache\": true,
-              \"secret\": \"$REVALIDATE_SECRET\"
+              \"secret\": \"${{ env.REVALIDATE_SECRET }}\"
             }")
           
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
@@ -574,7 +478,7 @@ jobs:
             const deploymentStatus = '${{ needs.detect-changes.outputs.deployment_status }}';
             
             const body = status === 'success' 
-              ? `✅ **CMS Sync Successful**\n\nContent has been synced to Strapi CMS with deployment status: \`${deploymentStatus}\`\n\n_Environment variables loaded from Vercel project settings_`
+              ? `✅ **CMS Sync Successful**\n\nContent has been synced to Strapi CMS with deployment status: \`${deploymentStatus}\``
               : `❌ **CMS Sync Failed**\n\nPlease check the workflow logs for details.`;
             
             github.rest.issues.createComment({
@@ -587,7 +491,7 @@ jobs:
   report-status:
     name: Report Status
     runs-on: ubuntu-latest
-    needs: [detect-changes, fetch-vercel-env, sync-to-cms]
+    needs: [detect-changes, sync-to-cms]
     if: always()
     
     steps:
@@ -596,19 +500,11 @@ jobs:
         run: |
           echo "✅ Workflow completed successfully!"
           echo "Deployment Status: ${{ needs.detect-changes.outputs.deployment_status }}"
-          echo "Environment variables were loaded from Vercel"
 
       - name: Report Failure
-        if: needs.sync-to-cms.result == 'failure' || needs.fetch-vercel-env.result == 'failure'
+        if: needs.sync-to-cms.result == 'failure'
         run: |
           echo "❌ Workflow failed!"
-          if [[ "${{ needs.fetch-vercel-env.result }}" == "failure" ]]; then
-            echo "Failed to fetch environment variables from Vercel"
-            echo "Please ensure:"
-            echo "  1. VERCEL_TOKEN is set in GitHub Secrets"
-            echo "  2. VERCEL_PROJECT_ID is set in GitHub Secrets"
-            echo "  3. Required env vars exist in Vercel project settings"
-          fi
           echo "Please check the logs above for detailed error messages."
           exit 1
 
