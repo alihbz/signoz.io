@@ -1,6 +1,6 @@
-# GitHub Actions Workflow: Sync Content to Strapi CMS
+# GitHub Actions Workflow: Sync Content to Strapi CMS (With Relations Support)
 # This workflow syncs content changes from specific data folders to Strapi CMS
-# Environment variables are managed as GitHub Secrets
+# Supports foreign key relations: tags, authors, related_faqs
 # Triggers: On labeled PR, on push to staging/main branches
 
 name: Sync Content to Strapi CMS
@@ -20,7 +20,8 @@ on:
       - 'data/**/*.md'
 
 env:
-  SYNC_FOLDERS: '["faqs"]'  # Add more folders like: '["faqs", "blogs", "docs"]'
+  # Configurable: Array of folders to sync to CMS
+  SYNC_FOLDERS: '["faqs"]'
   
   # Strapi Configuration
   CMS_API_URL: ${{ secrets.CMS_API_URL }}
@@ -28,9 +29,9 @@ env:
   
   # Revalidation Configuration
   NEXT_PUBLIC_BASE_URL: ${{ secrets.NEXT_PUBLIC_BASE_URL }}
-  REVALIDATE_SECRET: ${{ secrets.REVALIDATE_SECRET }}
+  REVALIDATION_SECRET_KEY: ${{ secrets.REVALIDATION_SECRET_KEY }}
   
-  # Branch Configuration (configurable)
+  # Branch Configuration
   PRODUCTION_BRANCH: 'test/cms-with-isr'
   STAGING_BRANCH: 'test/cms-with-isr'
 
@@ -48,7 +49,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch all history for accurate diff
+          fetch-depth: 0
 
       - name: Get Changed Files
         id: changed-files
@@ -65,7 +66,6 @@ jobs:
         run: |
           echo "Checking if sync should run..."
           
-          # Check if this is a labeled PR with 'staging' label
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             if [[ "${{ contains(github.event.pull_request.labels.*.name, 'staging') }}" == "true" ]]; then
               echo "should_sync=true" >> $GITHUB_OUTPUT
@@ -75,7 +75,6 @@ jobs:
               echo "⏭️ Sync skipped: PR does not have 'staging' label"
             fi
           else
-            # For push events, always sync
             echo "should_sync=true" >> $GITHUB_OUTPUT
             echo "✅ Sync enabled: Push event to branch"
           fi
@@ -83,7 +82,6 @@ jobs:
       - name: Determine Deployment Status
         id: determine-status
         run: |
-          # Determine deployment status based on event type and branch
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             if [[ "${{ contains(github.event.pull_request.labels.*.name, 'staging') }}" == "true" ]]; then
               echo "deployment_status=staging" >> $GITHUB_OUTPUT
@@ -119,7 +117,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2  # Need previous commit for accurate change detection
+          fetch-depth: 2
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -158,14 +156,27 @@ jobs:
             faqs: {
               apiPath: 'api::faq.faq',
               endpoint: 'faqs',
-              fields: ['title', 'description', 'date', 'path', 'content', 'deployment_status']
+              fields: ['title', 'description', 'date', 'path', 'content', 'deployment_status'],
+              relations: {
+                authors: {
+                  endpoint: 'authors',
+                  matchField: 'key',  // Match against author.key
+                  frontmatterField: 'authors'  // Array of author keys in frontmatter
+                },
+                tags: {
+                  endpoint: 'tags',
+                  matchField: 'key',  // Match against tag.key
+                  frontmatterField: 'tags',  // Array of tag values in frontmatter
+                  filterKey: true,  // Also check if tag.key contains 'faq' or 'faqs'
+                  matchValue: true  // Match against tag.value (case insensitive)
+                },
+                related_faqs: {
+                  endpoint: 'faqs',
+                  matchField: 'path',  // Match against faq.path
+                  frontmatterField: 'related_faqs'  // Array of FAQ paths in frontmatter
+                }
+              }
             }
-            // Add more collection schemas here as needed
-            // blogs: {
-            //   apiPath: 'api::blog.blog',
-            //   endpoint: 'blogs',
-            //   fields: ['title', 'date', 'path', 'content', 'deployment_status']
-            // }
           };
           
           // Helper: Extract folder name from file path
@@ -179,7 +190,6 @@ jobs:
           
           // Helper: Generate path field from file path
           function generatePathField(filePath, folderName) {
-            // Example: data/faqs/hidden-costs/file.mdx -> /hidden-costs/file
             const parts = filePath.split('/');
             const folderIndex = parts.indexOf(folderName);
             if (folderIndex === -1) return null;
@@ -203,13 +213,111 @@ jobs:
             }
           }
           
+          // Helper: Fetch all entities from Strapi endpoint
+          async function fetchAllEntities(endpoint) {
+            try {
+              const response = await axios.get(
+                `${CMS_API_URL}/api/${endpoint}`,
+                {
+                  params: {
+                    pagination: { pageSize: 100 }  // Adjust if you have more
+                  },
+                  headers: {
+                    'Authorization': `Bearer ${CMS_API_TOKEN}`,
+                    'Content-Type': 'application/json'
+                  }
+                }
+              );
+              
+              return response.data.data || [];
+            } catch (error) {
+              console.error(`Failed to fetch ${endpoint}: ${error.message}`);
+              return [];
+            }
+          }
+          
+          // Helper: Resolve relation IDs
+          async function resolveRelations(folderName, frontmatter) {
+            const schema = COLLECTION_SCHEMAS[folderName];
+            if (!schema.relations) return {};
+            
+            const relations = {};
+            
+            for (const [relationName, relationConfig] of Object.entries(schema.relations)) {
+              const frontmatterValues = frontmatter[relationConfig.frontmatterField];
+              
+              // Skip if no values in frontmatter
+              if (!frontmatterValues || !Array.isArray(frontmatterValues) || frontmatterValues.length === 0) {
+                console.log(`  ⏭️ Skipping ${relationName}: No values in frontmatter`);
+                continue;
+              }
+              
+              console.log(`  🔗 Resolving ${relationName}: ${frontmatterValues.join(', ')}`);
+              
+              // Fetch all entities from the relation endpoint
+              const entities = await fetchAllEntities(relationConfig.endpoint);
+              
+              if (entities.length === 0) {
+                console.warn(`  ⚠️ No entities found in ${relationConfig.endpoint}`);
+                continue;
+              }
+              
+              // Match entities based on configuration
+              const matchedIds = [];
+              
+              for (const value of frontmatterValues) {
+                let matched = null;
+                
+                if (relationConfig.filterKey && relationConfig.matchValue) {
+                  // Special case for tags: check key contains 'faq'/'faqs' AND value matches
+                  matched = entities.find(entity => {
+                    const keyMatch = entity.attributes.key && 
+                      (entity.attributes.key.toLowerCase().includes('faq') || 
+                       entity.attributes.key.toLowerCase().includes('faqs'));
+                    
+                    const valueMatch = entity.attributes.value && 
+                      entity.attributes.value.toLowerCase() === value.toLowerCase();
+                    
+                    return keyMatch && valueMatch;
+                  });
+                } else if (relationConfig.matchValue) {
+                  // Match against value field (case insensitive)
+                  matched = entities.find(entity => 
+                    entity.attributes.value && 
+                    entity.attributes.value.toLowerCase() === value.toLowerCase()
+                  );
+                } else {
+                  // Match against specified field (exact match)
+                  matched = entities.find(entity => 
+                    entity.attributes[relationConfig.matchField] === value
+                  );
+                }
+                
+                if (matched) {
+                  matchedIds.push(matched.id);
+                  console.log(`    ✅ Matched "${value}" → ID: ${matched.id}`);
+                } else {
+                  console.warn(`    ⚠️ No match found for "${value}" in ${relationConfig.endpoint}`);
+                }
+              }
+              
+              if (matchedIds.length > 0) {
+                relations[relationName] = matchedIds;
+                console.log(`  ✅ ${relationName}: Resolved ${matchedIds.length} relation(s)`);
+              }
+            }
+            
+            return relations;
+          }
+          
           // Helper: Map MDX data to Strapi schema
-          function mapToStrapiSchema(folderName, frontmatter, content, pathField) {
+          async function mapToStrapiSchema(folderName, frontmatter, content, pathField) {
             const schema = COLLECTION_SCHEMAS[folderName];
             if (!schema) {
               throw new Error(`No schema defined for folder: ${folderName}`);
             }
             
+            // Base data
             const data = {
               path: pathField,
               content: content,
@@ -217,13 +325,27 @@ jobs:
               ...frontmatter
             };
             
-            // Ensure all required fields are present
+            // Resolve relations
+            console.log(`  🔍 Resolving relations...`);
+            const relations = await resolveRelations(folderName, frontmatter);
+            
+            // Add relations to data
+            Object.assign(data, relations);
+            
+            // Remove relation fields from frontmatter (they're now IDs)
+            if (schema.relations) {
+              for (const relationConfig of Object.values(schema.relations)) {
+                delete data[relationConfig.frontmatterField];
+              }
+            }
+            
+            // Check for missing required fields
             const missingFields = schema.fields.filter(field => 
               field !== 'deployment_status' && !(field in data)
             );
             
             if (missingFields.length > 0) {
-              console.warn(`⚠️ Missing fields in ${pathField}: ${missingFields.join(', ')}`);
+              console.warn(`  ⚠️ Missing fields: ${missingFields.join(', ')}`);
             }
             
             return data;
@@ -273,6 +395,11 @@ jobs:
               return response.data;
             } catch (error) {
               const errorMsg = error.response?.data?.error?.message || error.message;
+              const errorDetails = error.response?.data?.error?.details || {};
+              console.error(`  ❌ Create failed: ${errorMsg}`);
+              if (Object.keys(errorDetails).length > 0) {
+                console.error(`  Details:`, JSON.stringify(errorDetails, null, 2));
+              }
               throw new Error(`Failed to create entry: ${errorMsg}`);
             }
           }
@@ -294,6 +421,11 @@ jobs:
               return response.data;
             } catch (error) {
               const errorMsg = error.response?.data?.error?.message || error.message;
+              const errorDetails = error.response?.data?.error?.details || {};
+              console.error(`  ❌ Update failed: ${errorMsg}`);
+              if (Object.keys(errorDetails).length > 0) {
+                console.error(`  Details:`, JSON.stringify(errorDetails, null, 2));
+              }
               throw new Error(`Failed to update entry: ${errorMsg}`);
             }
           }
@@ -318,14 +450,11 @@ jobs:
             }
           }
           
-          // Helper: Detect operation type (create, update, delete)
+          // Helper: Detect operation type
           function detectOperationType(filePath) {
             if (!fs.existsSync(filePath)) {
               return 'delete';
             }
-            
-            // Check if file was newly added (this is simplified; in real workflow, compare with base)
-            // For this implementation, we'll default to update and handle create in the sync logic
             return 'create_or_update';
           }
           
@@ -348,7 +477,6 @@ jobs:
               try {
                 const folderName = getFolderName(filePath);
                 
-                // Check if folder should be synced
                 if (!folderName || !SYNC_FOLDERS.includes(folderName)) {
                   console.log(`⏭️ Skipped: Folder '${folderName}' not in sync list`);
                   results.skipped.push(filePath);
@@ -363,7 +491,6 @@ jobs:
                 const operationType = detectOperationType(filePath);
                 
                 if (operationType === 'delete') {
-                  // Handle deletion
                   console.log(`🗑️ Deleting from CMS: ${pathField}`);
                   const existingEntry = await findEntryByPath(folderName, pathField);
                   
@@ -376,21 +503,17 @@ jobs:
                     results.skipped.push(filePath);
                   }
                 } else {
-                  // Handle create or update
                   const { frontmatter, content } = parseMDXFile(filePath);
-                  const strapiData = mapToStrapiSchema(folderName, frontmatter, content, pathField);
+                  const strapiData = await mapToStrapiSchema(folderName, frontmatter, content, pathField);
                   
-                  // Check if entry exists
                   const existingEntry = await findEntryByPath(folderName, pathField);
                   
                   if (existingEntry) {
-                    // Update existing entry
                     console.log(`🔄 Updating in CMS: ${pathField}`);
                     await updateEntry(folderName, existingEntry.id, strapiData);
                     console.log(`✅ Updated successfully`);
                     results.updated.push(filePath);
                   } else {
-                    // Create new entry
                     console.log(`➕ Creating in CMS: ${pathField}`);
                     await createEntry(folderName, strapiData);
                     console.log(`✅ Created successfully`);
@@ -414,7 +537,6 @@ jobs:
             console.log(`❌ Errors: ${results.errors.length}`);
             console.log('='.repeat(60) + '\n');
             
-            // Fail if there were errors
             if (results.errors.length > 0) {
               console.error('\n❌ SYNC FAILED - The following errors occurred:\n');
               results.errors.forEach(({ file, error }) => {
@@ -454,7 +576,7 @@ jobs:
             --data "{
               \"revalidateAll\": true,
               \"clearCache\": true,
-              \"secret\": \"${{ env.REVALIDATE_SECRET }}\"
+              \"secret\": \"${{ env.REVALIDATION_SECRET_KEY }}\"
             }")
           
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
@@ -478,7 +600,7 @@ jobs:
             const deploymentStatus = '${{ needs.detect-changes.outputs.deployment_status }}';
             
             const body = status === 'success' 
-              ? `✅ **CMS Sync Successful**\n\nContent has been synced to Strapi CMS with deployment status: \`${deploymentStatus}\``
+              ? `✅ **CMS Sync Successful**\n\nContent has been synced to Strapi CMS with deployment status: \`${deploymentStatus}\`\n\nRelations (authors, tags, related_faqs) have been automatically resolved.`
               : `❌ **CMS Sync Failed**\n\nPlease check the workflow logs for details.`;
             
             github.rest.issues.createComment({
